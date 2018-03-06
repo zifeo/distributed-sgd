@@ -52,10 +52,13 @@ scalacOptions ++= List(
 resolvers += Resolver.sonatypeRepo("releases")
 
 libraryDependencies ++= List(
-  "com.typesafe"         % "config"                % "1.3.3",
-  "com.iheart"           %% "ficus"                % "1.4.3",
-  "io.grpc"              % "grpc-netty"            % scalapb.compiler.Version.grpcJavaVersion,
-  "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion
+  "ch.qos.logback"           % "logback-classic"               % "1.2.3",
+  "org.apache.logging.log4j" % "log4j-to-slf4j"                % "2.10.0",
+  "ml.dmlc.mxnet"            % "libmxnet-scala-osx-x86_64-cpu" % "v0.11.1a",
+  "com.typesafe"             % "config"                        % "1.3.3",
+  "io.grpc"                  % "grpc-netty"                    % scalapb.compiler.Version.grpcJavaVersion,
+  "com.thesamet.scalapb"     %% "scalapb-runtime-grpc"         % scalapb.compiler.Version.scalapbVersion,
+  "com.iheart"               %% "ficus"                        % "1.4.3"
 )
 
 PB.targets in Compile := Seq(
