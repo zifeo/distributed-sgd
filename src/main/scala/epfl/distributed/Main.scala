@@ -1,10 +1,10 @@
-package epfl
+package epfl.distributed
 
-import epfl.hello.{GreeterGrpc, HelloReply, HelloRequest}
+import epfl.distributed.hello.{GreeterGrpc, HelloReply, HelloRequest}
 import io.grpc.{ManagedChannelBuilder, ServerBuilder}
 
-import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 object Main extends App {
 
@@ -16,11 +16,11 @@ object Main extends App {
     }
   }
 
-  val server = ServerBuilder.forPort(4000).addService(GreeterGrpc.bindService(new GreeterImpl, global)).build
+  val server = ServerBuilder.forPort(config.port).addService(GreeterGrpc.bindService(new GreeterImpl, global)).build
   server.start()
 
   // no plaintext requires some netty-bundling
-  val channel = ManagedChannelBuilder.forAddress("127.0.0.1", 4000).usePlaintext(true).build
+  val channel = ManagedChannelBuilder.forAddress("127.0.0.1", config.port).usePlaintext(true).build
   val stub    = GreeterGrpc.blockingStub(channel)
 
   val request = HelloRequest(name = "World")

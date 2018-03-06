@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package epfl;
+package epfl.distributed;
 
 // The greeting service definition.
 service Greeter {

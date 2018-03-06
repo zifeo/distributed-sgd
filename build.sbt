@@ -71,7 +71,7 @@ testOptions in Test += Tests.Argument("-oD")
 test in assembly := {}
 target in assembly := file("build")
 assemblyJarName in assembly := "distributed-sgd.jar"
-mainClass in assembly := Some("epfl.Main")
+mainClass in assembly := Some("epfl.distributed.Main")
 packageOptions := List(
   ManifestAttributes(
     "Change"     -> version.value,
