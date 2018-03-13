@@ -1,6 +1,8 @@
 package epfl.distributed
 
 import spire.math._
+import spire.random.rng.Cmwc5
+import spire.random.{Exponential, Gaussian, Uniform}
 
 import scala.collection.{IndexedSeqOptimized, mutable}
 
@@ -56,7 +58,7 @@ case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, Indexe
 
   def unary_- : Vec = Vec(v.map(-_))
 
-  def norm: Number = v.map(_ ** 2).reduce(_ + _)
+  def norm: Number = v.foldLeft(Number.zero)(_ + _ ** 2)
 
   def dot(other: Vec): Vec = {
     require(other.length == length, "Can't perform dot product of vectors of differnet length")
@@ -90,6 +92,12 @@ object Vec {
   def apply(numbers: Number*): Vec = Vec(numbers.toVector)
 
   def oneHot(value: Number, size: Int, index: Int): Vec = Vec(Vector.fill(size)(Number.zero).updated(index, value))
+
+  implicit private[this] val rng = Cmwc5()
+
+  def randU[N <: Number](size: Int, min: N, max: N) = Vec(Uniform.apply(min, max).sample[Vector](size))
+  def randG[N <: Number](size: Int, mean: N, stdDev: N) = Vec(Gaussian.apply(mean, stdDev).sample[Vector](size))
+  def randE[N <: Number](size: Int, rate: N) = Vec(Exponential.apply(rate).sample[Vector](size))
 
   implicit class RichNumber(val n: Number) extends AnyVal {
 
