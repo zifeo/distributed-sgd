@@ -95,9 +95,9 @@ object Vec {
 
   implicit private[this] val rng = Cmwc5()
 
-  def randU[N <: Number](size: Int, min: N, max: N) = Vec(Uniform.apply(min, max).sample[Vector](size))
-  def randG[N <: Number](size: Int, mean: N, stdDev: N) = Vec(Gaussian.apply(mean, stdDev).sample[Vector](size))
-  def randE[N <: Number](size: Int, rate: N) = Vec(Exponential.apply(rate).sample[Vector](size))
+  def randU[N <: Number: Uniform](size: Int, min: N, max: N) = Vec(Uniform.apply(min, max).sample[Vector](size))
+  def randG[N <: Number: Gaussian](size: Int, mean: N, stdDev: N) = Vec(Gaussian.apply(mean, stdDev).sample[Vector](size))
+  def randE[N <: Number: Exponential](size: Int, rate: N) = Vec(Exponential.apply(rate).sample[Vector](size))
 
   implicit class RichNumber(val n: Number) extends AnyVal {
 
