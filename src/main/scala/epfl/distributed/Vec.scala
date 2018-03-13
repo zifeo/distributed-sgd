@@ -72,14 +72,14 @@ case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, Indexe
     )
   }
 
-  def nonZero(lim: Number = 1e-15): IndexedSeq[(Number, Int)] = {
+  def nonZero(epsilon: Number = 1e-20): IndexedSeq[(Number, Int)] = {
     v.zipWithIndex
       .filter {
-        case (num, _) => abs(num) <= lim
+        case (num, _) => abs(num) <= epsilon
       }
   }
 
-  def nonZeroIndices(lim: Number = 1e-20): IndexedSeq[Int] = nonZero(lim).map(_._2)
+  def nonZeroIndices(epsilon: Number = 1e-20): IndexedSeq[Int] = nonZero(epsilon).map(_._2)
 
   /*
   Methods implementing IndexedSeqOptimized
