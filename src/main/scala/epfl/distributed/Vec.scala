@@ -7,6 +7,8 @@ import scala.collection.{IndexedSeqOptimized, mutable}
 case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, IndexedSeq[Number]] {
   require(v.nonEmpty, "A vector cannot be empty")
 
+  def apply(indices: Iterable[Int]): Vec = Vec(indices.map(v(_)).toIndexedSeq)
+
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
     require(other.length == length, "Can't perform element-wise operation on vectors of differnet length")
     Vec(
@@ -86,6 +88,8 @@ case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, Indexe
 object Vec {
 
   def apply(numbers: Number*): Vec = Vec(numbers.toVector)
+
+  def oneHot(value: Number, size: Int, index: Int): Vec = Vec(Vector.fill(size)(Number.zero).updated(index, value))
 
   implicit class RichNumber(val n: Number) extends AnyVal {
 

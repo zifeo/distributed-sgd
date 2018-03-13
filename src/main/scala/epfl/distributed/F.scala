@@ -8,11 +8,16 @@ case class F(f: Vec => Number) {
   def apply(v: Vec): Number = f(v)
 
   def gradient(v: Vec): Vec = {
-    Vec(v.map(xi => (f(xi + delta) + f(xi - delta)) / 2 * delta))
+    Vec(
+      v.zipWithIndex.map {
+        case (xi, idx) =>
+          (f(Vec.oneHot(xi + delta, v.size, idx)) - f(Vec.oneHot(xi - delta, v.size, idx))) / (2 * delta)
+      }
+    )
   }
 }
 
-object F{
+object F {
 
-  private def delta = 1e-15
+  private val delta: Number = 1e-30
 }
