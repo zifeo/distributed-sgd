@@ -49,6 +49,10 @@ scalacOptions ++= List(
   //"-Ywarn-value-discard"
 )
 
+scalacOptions in (Compile, console) --= Seq("-Ywarn-unused:imports", "-Xfatal-warnings")
+
+scalacOptions in Test --= Seq("-Ywarn-value-discard", "-Ywarn-unused:privates")
+
 resolvers += Resolver.sonatypeRepo("releases")
 
 libraryDependencies ++= List(
@@ -58,7 +62,8 @@ libraryDependencies ++= List(
   "com.typesafe"             % "config"                        % "1.3.3",
   "io.grpc"                  % "grpc-netty"                    % scalapb.compiler.Version.grpcJavaVersion,
   "com.thesamet.scalapb"     %% "scalapb-runtime-grpc"         % scalapb.compiler.Version.scalapbVersion,
-  "com.iheart"               %% "ficus"                        % "1.4.3"
+  "com.iheart"               %% "ficus"                        % "1.4.3",
+  "org.typelevel"            %% "spire"                        % "0.14.1"
 )
 
 PB.targets in Compile := Seq(

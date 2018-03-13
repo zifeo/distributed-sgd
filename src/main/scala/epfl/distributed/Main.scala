@@ -6,7 +6,17 @@ import io.grpc.{ManagedChannelBuilder, ServerBuilder}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
+//import Vec._
+
 object Main extends App {
+
+  val v1 = Vec(1, 2, 3)
+  val v2 = Vec(1, 2, 3)
+
+  v1 + v2
+  v1 dot v2
+  v1 * 2
+  v1.norm
 
   class GreeterImpl extends GreeterGrpc.Greeter {
     override def sayHello(req: HelloRequest) = {
