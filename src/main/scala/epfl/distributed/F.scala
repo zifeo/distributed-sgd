@@ -9,7 +9,7 @@ case class F(f: Vec => Number) {
 
   def gradient(v: Vec): Vec = {
     Vec(
-      v.zipWithIndex.map {
+      v.map(_.toBigDecimal).zipWithIndex.map {
         case (xi, idx) =>
           (f(Vec.oneHot(xi + delta, v.size, idx)) - f(Vec.oneHot(xi - delta, v.size, idx))) / (2 * delta)
       }
@@ -19,5 +19,5 @@ case class F(f: Vec => Number) {
 
 object F {
 
-  private val delta: Number = 1e-30
+  private val delta: BigDecimal = BigDecimal(1e-25)
 }
