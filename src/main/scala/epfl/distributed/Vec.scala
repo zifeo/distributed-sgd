@@ -58,7 +58,10 @@ case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, Indexe
 
   def unary_- : Vec = Vec(v.map(-_))
 
-  def norm: Number = v.foldLeft(Number.zero)(_ + _ ** 2)
+  def sum: Number = v.reduce(_ + _)
+
+  def normSquared: Number = v.foldLeft(Number.zero)(_ + _ ** 2)
+  def norm: Number = sqrt(normSquared)
 
   def dot(other: Vec): Vec = {
     require(other.length == length, "Can't perform dot product of vectors of differnet length")
@@ -102,12 +105,15 @@ object Vec {
 
   def apply(numbers: Number*): Vec = Vec(numbers.toVector)
 
-  def oneHot(value: Number, size: Int, index: Int): Vec = Vec(Vector.fill(size)(Number.zero).updated(index, value))
+  def zeros(size: Int): Vec = Vec(Vector.fill(size)(Number.zero))
+  def ones(size: Int): Vec = Vec(Vector.fill(size)(Number.one))
+  def fill(value: Number, size: Int): Vec = Vec(Vector.fill(size)(value))
+  def oneHot(value: Number, index: Int, size: Int): Vec = Vec(Vector.fill(size)(Number.zero).updated(index, value))
 
   implicit private[this] val rng = Cmwc5()
 
   def randU[N <: Number: Uniform](size: Int, min: N, max: N) = Vec(Uniform.apply(min, max).sample[Vector](size))
-  def randG[N <: Number: Gaussian](size: Int, mean: N, stdDev: N) =
+  def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) =
     Vec(Gaussian.apply(mean, stdDev).sample[Vector](size))
   def randE[N <: Number: Exponential](size: Int, rate: N) = Vec(Exponential.apply(rate).sample[Vector](size))
 
