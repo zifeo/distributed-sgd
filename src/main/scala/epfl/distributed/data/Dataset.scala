@@ -6,11 +6,11 @@ object Dataset {
 
   val folder = "./data"
 
-  type SparseVec = Map[Int, Double]
+  type SparseVec = Map[Int, Float]
 
-  def rcv1(): List[(SparseVec, String)] = {
+  def rcv1(): Vector[(SparseVec, String)] = {
 
-    val dataFiles   = (0 until 0).map(d => s"lyrl2004_vectors_test_pt$d.data") + "lyrl2004_vectors_train.dat"
+    val dataFiles   = (0 to 3).map(d => s"lyrl2004_vectors_test_pt$d.dat") :+ "lyrl2004_vectors_train.dat"
     val targetsFile = "rcv1-v2.topics.qrels"
 
     val targets = File(s"$folder/$targetsFile").lines.map { line =>
@@ -18,21 +18,22 @@ object Dataset {
       did -> cat
     }.toMap
 
-    dataFiles
+    dataFiles.toVector
       .flatMap { file =>
-        File(s"$folder/$file").lines
-      }
-      .map { line =>
-        val Array(did, values @ _*) = line.split(' ')
+        println(file)
+        File(s"$folder/$file").lineIterator
+          .map { line =>
+            val Array(did, values @ _*) = line.split(' ')
 
-        val weights = values.map { value =>
-          val Array(idx, weight) = value.split(':')
-          idx.toInt -> weight.toDouble
-        }.toMap
+            val weights = values.collect {
+              case value if value.nonEmpty =>
+                val Array(idx, weight) = value.split(':')
+                idx.toInt -> weight.toFloat
+            }.toMap
 
-        weights -> targets(did)
+            weights -> targets(did)
+          }
       }
-      .toList
   }
 
 }
