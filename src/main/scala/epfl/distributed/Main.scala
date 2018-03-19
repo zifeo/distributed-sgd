@@ -1,33 +1,21 @@
 package epfl.distributed
 
-import epfl.distributed.hello.{GreeterGrpc, HelloReply, HelloRequest}
-import io.grpc.{ManagedChannelBuilder, ServerBuilder}
+import java.util.concurrent.TimeUnit
+
+import epfl.distributed.core.core.Node
+import epfl.distributed.core.{Master, Slave}
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 
 object Main extends App {
 
-  class GreeterImpl extends GreeterGrpc.Greeter {
-    override def sayHello(req: HelloRequest): Future[HelloReply] = {
-      println(req)
-      val reply = HelloReply(message = "Hello " + req.name)
-      Future.successful(reply)
-    }
-  }
+  val masterNode :: slaveNodes = (0 to 3).map(p => Node("127.0.0.1", 4000 + p)).toList
 
-  val server = ServerBuilder.forPort(config.port).addService(GreeterGrpc.bindService(new GreeterImpl, global)).build
-  server.start()
+  val master = new Master(masterNode)
+  val slaves = slaveNodes.map(sn => new Slave(sn, masterNode))
 
-  // no plaintext requires some netty-certificate-bundling
-  val channel = ManagedChannelBuilder.forAddress("127.0.0.1", config.port).usePlaintext(true).build
-  val stub    = GreeterGrpc.blockingStub(channel)
+  master.compute("hello").foreach(println)
 
-  val request = HelloRequest(name = "World")
-  println(stub.sayHello(request))
-
-  sys.addShutdownHook {
-    server.shutdown()
-  }
+  master.server.awaitTermination(10, TimeUnit.SECONDS)
 
 }

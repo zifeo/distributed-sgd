@@ -1,6 +1,8 @@
 package epfl.distributed
 
+import epfl.distributed.core.core.Node
 import io.grpc._
+
 
 package object core {
 
@@ -9,5 +11,11 @@ package object core {
 
   def newChannel(ip: String, port: Int): ManagedChannel =
     ManagedChannelBuilder.forAddress(ip, port).usePlaintext(true).build
+
+  def pretty(node: Node): String = {
+    val Node(ip, port) = node
+    val flatIp = ip.replace(".", "")
+    s"$flatIp:$port"
+  }
 
 }

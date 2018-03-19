@@ -2,46 +2,57 @@ package epfl.distributed.core
 
 import java.util.concurrent.ConcurrentHashMap
 
-import epfl.distributed.config
+import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.core._
+import io.grpc.ManagedChannel
 
+import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class Master {
+class Master(node: Node) {
 
-  val ip = "127.0.0.1"
-  val port = 4000
+  private val log = Logger(s"master-${pretty(node)}")
+  private val slaves = new ConcurrentHashMap[Node, ManagedChannel]()
 
-  val slaves = ConcurrentHashMap.newKeySet[SlaveInfo]()
 
   class MasterImpl extends MasterGrpc.Master {
 
-    def registerSlave(request: SlaveInfo): Future[Ack] = {
-      slaves.add(request)
+    def registerSlave(node: Node): Future[Ack] = {
+      log.info(s"new slave ${pretty(node)}")
+
+      val channel = newChannel(node.ip, node.port)
+      slaves.put(node, channel)
       Future.successful(Ack())
     }
 
-    def unregisterSlave(request: SlaveInfo): Future[Ack] = {
-      slaves.remove(request)
+    def unregisterSlave(node: Node): Future[Ack] = {
+      log.info(s"exit slave ${pretty(node)}")
+
+      slaves.remove(node)
       Future.successful(Ack())
     }
 
   }
 
   // new thread pool for dispatcher
-  val server = newServer(MasterGrpc.bindService(new MasterImpl, global), port)
+  val server = newServer(MasterGrpc.bindService(new MasterImpl, global), node.port)
   server.start()
 
-  def compute(): Unit = {
+  log.info("ready")
 
-    // for each slaves
-    val channel = newChannel("127.0.0.1", config.port)
-    val stub = MasterGrpc.blockingStub(channel)
+  def compute(data: String): Future[String] = {
 
-    val request = SlaveInfo(ip, port)
-    println(stub.registerSlave(SlaveInfo(ip, port)))
+    val req = ComputeRequest("test")
 
+    val pending = slaves.values().asScala.map { slaveChannel =>
+      val stub = SlaveGrpc.stub(slaveChannel)
+      stub.compute(req)
+    }
+
+    val results = Future.sequence(pending).map(_.map(_.result).mkString(", "))
+    log.debug("compute reply")
+    results
   }
 
 }
