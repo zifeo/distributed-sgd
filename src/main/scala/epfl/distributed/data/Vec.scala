@@ -1,4 +1,4 @@
-package epfl.distributed
+package epfl.distributed.data
 
 import spire.math._
 import spire.random.rng.Cmwc5
@@ -61,7 +61,7 @@ case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, Indexe
   def sum: Number = v.reduce(_ + _)
 
   def normSquared: Number = v.foldLeft(Number.zero)(_ + _ ** 2)
-  def norm: Number = sqrt(normSquared)
+  def norm: Number        = sqrt(normSquared)
 
   def dot(other: Vec): Vec = {
     require(other.length == length, "Can't perform dot product of vectors of differnet length")
@@ -99,23 +99,24 @@ case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, Indexe
   protected[this] def newBuilder: mutable.Builder[Number, IndexedSeq[Number]] = IndexedSeq.newBuilder[Number]
 
   override def length: Int = v.length
+
 }
 
 object Vec {
 
   def apply(numbers: Number*): Vec = Vec(numbers.toVector)
 
-  def zeros(size: Int): Vec = Vec(Vector.fill(size)(Number.zero))
-  def ones(size: Int): Vec = Vec(Vector.fill(size)(Number.one))
-  def fill(value: Number, size: Int): Vec = Vec(Vector.fill(size)(value))
+  def zeros(size: Int): Vec                             = Vec(Vector.fill(size)(Number.zero))
+  def ones(size: Int): Vec                              = Vec(Vector.fill(size)(Number.one))
+  def fill(value: Number, size: Int): Vec               = Vec(Vector.fill(size)(value))
   def oneHot(value: Number, index: Int, size: Int): Vec = Vec(Vector.fill(size)(Number.zero).updated(index, value))
 
-  implicit private[this] val rng = Cmwc5()
+  implicit private[this] val rng: Cmwc5 = Cmwc5()
 
-  def randU[N <: Number: Uniform](size: Int, min: N, max: N) = Vec(Uniform.apply(min, max).sample[Vector](size))
+  def randU[N <: Number: Uniform](size: Int, min: N, max: N) = Vec(Uniform(min, max).sample[Vector](size))
   def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) =
-    Vec(Gaussian.apply(mean, stdDev).sample[Vector](size))
-  def randE[N <: Number: Exponential](size: Int, rate: N) = Vec(Exponential.apply(rate).sample[Vector](size))
+    Vec(Gaussian(mean, stdDev).sample[Vector](size))
+  def randE[N <: Number: Exponential](size: Int, rate: N) = Vec(Exponential(rate).sample[Vector](size))
 
   implicit class RichNumber(val n: Number) extends AnyVal {
 
@@ -123,4 +124,5 @@ object Vec {
       vector.map(_ * n)
     }
   }
+
 }

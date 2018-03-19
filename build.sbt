@@ -44,8 +44,8 @@ scalacOptions ++= List(
   "-Ywarn-nullary-unit",
   "-Ywarn-unused:locals",
   "-Ywarn-unused:privates",
-  "-Ywarn-unused:implicits",
-  "-Ywarn-unused-import"
+  "-Ywarn-unused:implicits"
+  //"-Ywarn-unused-import"
   //"-Ywarn-value-discard"
 )
 
@@ -56,14 +56,16 @@ scalacOptions in Test --= Seq("-Ywarn-value-discard", "-Ywarn-unused:privates")
 resolvers += Resolver.sonatypeRepo("releases")
 
 libraryDependencies ++= List(
-  "ch.qos.logback"           % "logback-classic"               % "1.2.3",
-  "org.apache.logging.log4j" % "log4j-to-slf4j"                % "2.10.0",
-  "ml.dmlc.mxnet"            % "libmxnet-scala-osx-x86_64-cpu" % "v0.11.1a",
-  "com.typesafe"             % "config"                        % "1.3.3",
-  "io.grpc"                  % "grpc-netty"                    % scalapb.compiler.Version.grpcJavaVersion,
-  "com.thesamet.scalapb"     %% "scalapb-runtime-grpc"         % scalapb.compiler.Version.scalapbVersion,
-  "com.iheart"               %% "ficus"                        % "1.4.3",
-  "org.typelevel"            %% "spire"                        % "0.14.1"
+  "ch.qos.logback"             % "logback-classic"       % "1.2.3",
+  "org.apache.logging.log4j"   % "log4j-to-slf4j"        % "2.11.0",
+  "com.typesafe"               % "config"                % "1.3.3",
+  "io.grpc"                    % "grpc-netty"            % scalapb.compiler.Version.grpcJavaVersion,
+  "com.thesamet.scalapb"       %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion,
+  "com.iheart"                 %% "ficus"                % "1.4.3",
+  "org.typelevel"              %% "spire"                % "0.15.0",
+  "com.typesafe.scala-logging" %% "scala-logging"        % "3.8.0",
+  "com.github.pathikrit"       %% "better-files"         % "3.4.0",
+  "org.scalatest"              %% "scalatest"            % "3.0.5" % "test"
 )
 
 PB.targets in Compile := Seq(

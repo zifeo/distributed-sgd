@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package epfl.distributed.core;
+
+service Master {
+    rpc RegisterSlave (Node) returns (Ack) {}
+    rpc UnregisterSlave (Node) returns (Ack) {}
+}
+
+message Node {
+    string ip = 1;
+    int32 port = 2;
+}
+
+message Ack {}
+
+service Slave {
+    rpc Compute (ComputeRequest) returns (ComputeReply) {}
+}
+
+message ComputeRequest {
+    string data = 1;
+}
+
+message ComputeReply {
+    string result = 1;
+}

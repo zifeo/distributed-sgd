@@ -1,4 +1,4 @@
-package epfl.distributed
+package epfl.distributed.data
 
 import spire.math._
 
@@ -21,4 +21,5 @@ case class F(f: Vec => Number) {
 object F {
 
   private val delta: BigDecimal = BigDecimal(1e-25)
+
 }

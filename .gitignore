@@ -18,5 +18,6 @@ project/plugins/project/
 .idea
 build
 .env
+data/*
 
 src/main/scala/epfl/distributed/test\.sc
