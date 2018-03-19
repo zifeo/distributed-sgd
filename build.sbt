@@ -45,7 +45,7 @@ scalacOptions ++= List(
   "-Ywarn-unused:locals",
   "-Ywarn-unused:privates",
   "-Ywarn-unused:implicits",
-  "-Ywarn-unused-import"
+  //"-Ywarn-unused-import"
   //"-Ywarn-value-discard"
 )
 
@@ -63,6 +63,7 @@ libraryDependencies ++= List(
   "com.thesamet.scalapb"     %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion,
   "com.iheart"               %% "ficus"                % "1.4.3",
   "org.typelevel"            %% "spire"                % "0.15.0",
+  "com.github.pathikrit"     %% "better-files"         % "3.4.0",
   "org.scalatest"            %% "scalatest"            % "3.0.5" % "test"
 )
 
