@@ -9,7 +9,7 @@ import scala.concurrent.Future
 object Main extends App {
 
   class GreeterImpl extends GreeterGrpc.Greeter {
-    override def sayHello(req: HelloRequest) = {
+    override def sayHello(req: HelloRequest): Future[HelloReply] = {
       println(req)
       val reply = HelloReply(message = "Hello " + req.name)
       Future.successful(reply)
