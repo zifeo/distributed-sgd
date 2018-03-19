@@ -3,7 +3,6 @@ package epfl.distributed
 import epfl.distributed.core.core.Node
 import io.grpc._
 
-
 package object core {
 
   def newServer(service: ServerServiceDefinition, port: Int): Server =
@@ -14,7 +13,7 @@ package object core {
 
   def pretty(node: Node): String = {
     val Node(ip, port) = node
-    val flatIp = ip.replace(".", "")
+    val flatIp         = ip.replace(".", "")
     s"$flatIp:$port"
   }
 

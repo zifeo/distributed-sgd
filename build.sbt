@@ -64,6 +64,7 @@ libraryDependencies ++= List(
   "com.iheart"                 %% "ficus"                % "1.4.3",
   "org.typelevel"              %% "spire"                % "0.15.0",
   "com.typesafe.scala-logging" %% "scala-logging"        % "3.8.0",
+  "com.nrinaudo"               %% "kantan.csv"           % "0.4.0",
   "com.github.pathikrit"       %% "better-files"         % "3.4.0",
   "org.scalatest"              %% "scalatest"            % "3.0.5" % "test"
 )

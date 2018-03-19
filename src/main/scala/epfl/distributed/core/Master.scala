@@ -12,9 +12,8 @@ import scala.concurrent.Future
 
 class Master(node: Node) {
 
-  private val log = Logger(s"master-${pretty(node)}")
+  private val log    = Logger(s"master-${pretty(node)}")
   private val slaves = new ConcurrentHashMap[Node, ManagedChannel]()
-
 
   class MasterImpl extends MasterGrpc.Master {
 

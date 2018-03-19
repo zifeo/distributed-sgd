@@ -10,7 +10,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object Main extends App {
 
-  //println(Dataset.rcv1().size)
+  println(Dataset.rcv1(1).mkString("\n"))
 
   val masterNode :: slaveNodes = (0 to 3).map(p => Node("127.0.0.1", 4000 + p)).toList
 
