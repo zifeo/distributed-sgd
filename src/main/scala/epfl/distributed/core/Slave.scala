@@ -23,6 +23,7 @@ class Slave(node: Node, master: Node) {
       Future.successful(reply)
     }
 
+
   }
 
   // new thread pool for dispatcher

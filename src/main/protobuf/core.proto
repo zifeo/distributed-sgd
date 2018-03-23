@@ -16,6 +16,16 @@ message Ack {}
 
 service Slave {
     rpc Compute (ComputeRequest) returns (ComputeReply) {}
+
+    rpc Gradient (GradientRequest) returns (GradientReply) {}
+}
+
+message GradientRequest {
+    repeated int32 samples = 1;
+}
+
+message GradientReply {
+    map<int32, double> grad = 1;
 }
 
 message ComputeRequest {
