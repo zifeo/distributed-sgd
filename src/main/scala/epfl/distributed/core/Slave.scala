@@ -1,12 +1,13 @@
 package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
+import epfl.distributed.Main.{Data, SparseVector}
 import epfl.distributed.core.core._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class Slave(node: Node, master: Node) {
+class Slave(node: Node, master: Node, data: Data) {
 
   private val log = Logger(s"slave--${pretty(node)}")
 
@@ -23,6 +24,25 @@ class Slave(node: Node, master: Node) {
       Future.successful(reply)
     }
 
+    def gradient(request: GradientRequest): Future[GradientReply] = Future {
+      val receivedAt                                         = System.currentTimeMillis()
+      val GradientRequest(samplesIdx, step, lambda, weights) = request
+
+      val grad = samplesIdx
+        .map { idx =>
+          val (x, y) = data(idx)
+
+          // need check
+          val bal  = y * sparseDot(x, weights)
+          val regu = sparseMult(weights, lambda * 2.0 / weights.size).values.sum
+          val sub  = if (bal < 0) Map.empty: SparseVector else sparseMult(x, -step * y)
+          sparseAddition(sub, regu)
+        }
+        .reduce(sparseAdd)
+
+      val terminatedAt = System.currentTimeMillis()
+      GradientReply(grad, receivedAt, terminatedAt)
+    }
 
   }
 

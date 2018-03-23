@@ -1,16 +1,17 @@
 package epfl.distributed.data
 
-import better.files.{File, _}
+import better.files.File
+import epfl.distributed.Main.Data
 import kantan.codecs.resource.ResourceIterator
-import kantan.csv.{CsvReader, _}
 import kantan.csv.ops._
+import kantan.csv._
 
 object Dataset {
 
   val folder = "./data"
 
-  // CCAT should be transform to 0 or 1
-  def rcv1(entries: Int = 10): List[(Map[Int, Double], Int)] = {
+  // CCAT transform to -1 or 1
+  def rcv1(entries: Int = 10): Data = {
     // not that safe
 
     val dataFiles   = (0 to 3).map(d => s"lyrl2004_vectors_test_pt$d.dat") :+ "lyrl2004_vectors_train.dat"
@@ -25,7 +26,7 @@ object Dataset {
       .map { line =>
         line.map { cells =>
           val Vector(cat, did, _) = cells
-          val label               = if (cat == "CCAT") 1 else 0
+          val label               = if (cat == "CCAT") 1 else -1
           did -> label
         }.toOption
 
@@ -54,7 +55,7 @@ object Dataset {
         }
         .take(entries)
         .flatten
-        .toList
+        .toArray
 
     data
   }

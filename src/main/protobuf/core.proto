@@ -21,11 +21,16 @@ service Slave {
 }
 
 message GradientRequest {
-    repeated int32 samples = 1;
+    repeated int32 samples = 1 [packed=true];
+    double step = 2;
+    double lambda = 3;
+    map<int32, double> weights = 4;
 }
 
 message GradientReply {
     map<int32, double> grad = 1;
+    int64 startedAt = 2;
+    int64 terminatedAt = 3;
 }
 
 message ComputeRequest {
