@@ -11,7 +11,7 @@ object Dataset {
   val folder = "./data"
 
   // CCAT transform to -1 or 1
-  def rcv1(entries: Int = 10): Data = {
+  def rcv1(entries: Int = 10): Array[(Map[Int, Double], Int)] = {
     // not that safe
 
     val dataFiles   = (0 to 3).map(d => s"lyrl2004_vectors_test_pt$d.dat") :+ "lyrl2004_vectors_train.dat"

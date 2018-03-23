@@ -3,15 +3,16 @@ package epfl.distributed.core
 import java.util.concurrent.ConcurrentHashMap
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.Main.{Data, SparseVector}
+import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
+import epfl.distributed.data.dtypes.NaiveSparseVector
 import io.grpc.ManagedChannel
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class Master(node: Node, data: Data) {
+class Master(node: Node, data: Data[NaiveSparseVector]) {
 
   private val log    = Logger(s"master-${pretty(node)}")
   private val slaves = new ConcurrentHashMap[Node, ManagedChannel]()
@@ -41,13 +42,13 @@ class Master(node: Node, data: Data) {
 
   log.info("ready")
 
-  def gradient(epochs: Int, batch: Int = 1): Future[SparseVector] = {
+  def gradient(epochs: Int, batch: Int = 1): Future[NaiveSparseVector] = {
     log.info(s"dsgd start")
 
-    val init    = Future.successful(Map.empty: SparseVector)
+    val init    = Future.successful(NaiveSparseVector.empty)
     val workers = slaves.values().asScala.map(SlaveGrpc.stub)
     val piece   = Math.floorDiv(data.length, workers.size)
-    val dims    = data.flatMap(_._1.keys).max
+    val dims    = data.map(_._1.nonzero).max
 
     log.info(s"dims $dims")
 
@@ -64,7 +65,7 @@ class Master(node: Node, data: Data) {
                 val work = workers.zipWithIndex.map {
                   case (worker, i) =>
                     val sample = i * piece + step
-                    val req    = GradientRequest(sample until Math.min(sample + batch, i * piece + piece), 0.001, 0, weights)
+                    val req    = GradientRequest(sample until Math.min(sample + batch, i * piece + piece), 0.001, 0, weights.m)
                     worker.gradient(req).map { res =>
                       require(!res.grad.values.exists(_.isNaN), "NaN detected")
                       res
@@ -73,12 +74,12 @@ class Master(node: Node, data: Data) {
                 Future.sequence(work)
               }
               .map { res =>
-                val grad        = res.map(_.grad: SparseVector).reduce(sparseAdd)
+                val grad        = res.map(_.grad: NaiveSparseVector).reduce(_ + _)
                 val durations   = res.map(x => x.terminatedAt - x.startedAt)
                 val durationMax = durations.max / 1000.0
                 val durationMin = durations.min / 1000.0
                 val durationAvg = durations.sum / 1000.0 / durations.size
-                val sparsity    = if (grad.isEmpty) 100 else 100 - 100 * grad.size.toDouble / dims
+                val sparsity    = if (grad.nonzero > 0) 100 else 100 - 100 * grad.nonzero.toDouble / dims
                 log.debug(f"$epoch.$step duration $sparsity%.2f ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
                 grad
               }
