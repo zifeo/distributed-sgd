@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package epfl.distributed.core;
 
+
 service Master {
     rpc RegisterSlave (Node) returns (Ack) {}
     rpc UnregisterSlave (Node) returns (Ack) {}
@@ -14,9 +15,8 @@ message Node {
 
 message Ack {}
 
-service Slave {
-    rpc Compute (ComputeRequest) returns (ComputeReply) {}
 
+service Slave {
     rpc Gradient (GradientRequest) returns (GradientReply) {}
 }
 
@@ -31,12 +31,4 @@ message GradientReply {
     map<int32, double> grad = 1;
     int64 startedAt = 2;
     int64 terminatedAt = 3;
-}
-
-message ComputeRequest {
-    string data = 1;
-}
-
-message ComputeReply {
-    string result = 1;
 }

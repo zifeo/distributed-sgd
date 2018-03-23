@@ -15,15 +15,6 @@ class Slave(node: Node, master: Node, data: Data) {
 
     // internal threadpool for work?
 
-    def compute(request: ComputeRequest): Future[ComputeReply] = {
-
-      log.debug("compute request")
-
-      val data  = request.data
-      val reply = ComputeReply(s"$data (${pretty(node)})")
-      Future.successful(reply)
-    }
-
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
       val receivedAt                                         = System.currentTimeMillis()
       val GradientRequest(samplesIdx, step, lambda, weights) = request
