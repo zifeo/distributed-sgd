@@ -2,17 +2,17 @@ package epfl.distributed.data
 
 import spire.math._
 
-case class F(f: Vec => Number) {
+case class F(f: Dense => Number) {
   import F.delta
 
-  def apply(v: Vec): Number = f(v)
+  def apply(v: Dense): Number = f(v)
 
-  def gradient(v: Vec): Vec = {
-    Vec(
+  def gradient(v: Dense): Dense = {
+    Dense(
       v.zipWithIndex.map {
         case (xi, idx) =>
           val xiBigD = xi.toBigDecimal
-          (f(Vec.oneHot(xiBigD + delta, v.size, idx)) - f(Vec.oneHot(xiBigD - delta, v.size, idx))) / (2 * delta)
+          (f(Sparse.oneHot(xiBigD + delta, v.size, idx)) - f(Sparse.oneHot(xiBigD - delta, v.size, idx))) / (2 * delta)
       }
     )
   }

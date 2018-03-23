@@ -1,128 +1,68 @@
 package epfl.distributed.data
 
-import spire.math._
-import spire.random.rng.Cmwc5
+import spire.math.{Number, sqrt}
 import spire.random.{Exponential, Gaussian, Uniform}
 
-import scala.collection.{IndexedSeqOptimized, mutable}
+trait Vec {
 
-case class Vec(v: IndexedSeq[Number]) extends IndexedSeqOptimized[Number, IndexedSeq[Number]] {
-  require(v.nonEmpty, "A vector cannot be empty")
+  def size: Int
 
-  def apply(indices: Iterable[Int]): Vec = Vec(indices.map(v(_)).toIndexedSeq)
+  def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec
 
-  def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
-    require(other.length == length, "Can't perform element-wise operation on vectors of differnet length")
-    Vec(
-      v zip other.v map {
-        case (e1, e2) => op(e1, e2)
-      }
-    )
-  }
+  def mapValues(op: Number => Number): Vec
 
-  def +(other: Vec): Vec = {
-    elementWiseOp(other, _ + _)
-  }
+  def foldLeft[B](init: B)(op: (B, Number) => B): B
 
-  def +(scalar: Number): Vec = {
-    Vec(v.map(_ + scalar))
-  }
+  def sparse: Sparse
 
-  def -(other: Vec): Vec = {
-    elementWiseOp(other, _ - _)
-  }
+  def nonZeroIndices: Iterable[Int] = sparse.values.keys
 
-  def -(scalar: Number): Vec = {
-    Vec(v.map(_ - scalar))
-  }
+  def +(other: Vec): Vec = elementWiseOp(other, _ + _)
 
-  def *(other: Vec): Vec = {
-    elementWiseOp(other, _ * _)
-  }
+  def +(scalar: Number): Vec = mapValues(_ + scalar)
 
-  def *(scalar: Number): Vec = {
-    Vec(v.map(_ * scalar))
-  }
+  def -(other: Vec): Vec = elementWiseOp(other, _ - _)
 
-  def /(other: Vec): Vec = {
-    elementWiseOp(other, _ / _)
-  }
+  def -(scalar: Number): Vec = mapValues(_ - scalar)
 
-  def /(scalar: Number): Vec = {
-    Vec(v.map(_ / scalar))
-  }
+  def *(other: Vec): Vec = elementWiseOp(other, _ * _)
 
-  def **(scalar: Number): Vec = {
-    Vec(v.map(_ ** scalar))
-  }
+  def *(scalar: Number): Vec = mapValues(_ * scalar)
 
-  def unary_- : Vec = Vec(v.map(-_))
+  def /(other: Vec): Vec = elementWiseOp(other, _ / _)
 
-  def sum: Number = v.reduce(_ + _)
+  def /(scalar: Number): Vec = mapValues(_ / scalar)
 
-  def normSquared: Number = v.foldLeft(Number.zero)(_ + _ ** 2)
+  def **(scalar: Number): Vec = mapValues(_ ** scalar)
+
+  def unary_- : Vec = mapValues(-_)
+
+  def sum: Number = foldLeft(Number.zero)(_ + _)
+
+  def normSquared: Number = foldLeft(Number.zero)(_ + _ ** 2)
   def norm: Number        = sqrt(normSquared)
 
-  def dot(other: Vec): Vec = {
-    require(other.length == length, "Can't perform dot product of vectors of differnet length")
-    Vec(
-      v.view
-        .zip(other.v)
-        .map {
-          case (e1, e2) => e1 * e2
-        }
-        .reduce(_ + _)
-    )
+  def dot(other: Vec): Number = {
+    require(other.size == size, "Can't perform dot product of vectors of different length")
+
+    (this * other).sum
   }
-
-  def nonZero(epsilon: Number = 1e-20): IndexedSeq[(Number, Int)] = {
-    val eps = abs(epsilon)
-
-    v.zipWithIndex
-      .filter {
-        case (num, _) => abs(num) <= eps
-      }
-  }
-
-  def nonZeroIndices(epsilon: Number = 1e-20): IndexedSeq[Int] = nonZero(epsilon).map(_._2)
-
-  /*
-  Methods implementing IndexedSeqOptimized
-   */
-
-  def apply(idx: Int): Number = v(idx)
-
-  override def repr: IndexedSeq[Number] = v
-
-  def seq: IndexedSeq[Number] = v
-
-  protected[this] def newBuilder: mutable.Builder[Number, IndexedSeq[Number]] = IndexedSeq.newBuilder[Number]
-
-  override def length: Int = v.length
-
 }
 
 object Vec {
 
-  def apply(numbers: Number*): Vec = Vec(numbers.toVector)
+  def apply(numbers: Number*): Dense          = Dense(numbers.toVector)
+  def apply(numbers: Iterable[Number]): Dense = Dense(numbers.toVector)
 
-  def zeros(size: Int): Vec                             = Vec(Vector.fill(size)(Number.zero))
-  def ones(size: Int): Vec                              = Vec(Vector.fill(size)(Number.one))
-  def fill(value: Number, size: Int): Vec               = Vec(Vector.fill(size)(value))
-  def oneHot(value: Number, index: Int, size: Int): Vec = Vec(Vector.fill(size)(Number.zero).updated(index, value))
+  def apply(size: Int, values: (Int, Number)*): Sparse   = Sparse(values.toMap, size)
+  def apply(size: Int, values: Map[Int, Number]): Sparse = Sparse(values, size)
 
-  implicit private[this] val rng: Cmwc5 = Cmwc5()
+  def zeros(size: Int): Dense                             = Dense.zeros(size)
+  def ones(size: Int): Dense                              = Dense.ones(size)
+  def fill(value: Number, size: Int): Dense               = Dense.fill(value, size)
+  def oneHot(value: Number, index: Int, size: Int): Dense = Dense.oneHot(value, index, size)
 
-  def randU[N <: Number: Uniform](size: Int, min: N, max: N) = Vec(Uniform(min, max).sample[Vector](size))
-  def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) =
-    Vec(Gaussian(mean, stdDev).sample[Vector](size))
-  def randE[N <: Number: Exponential](size: Int, rate: N) = Vec(Exponential(rate).sample[Vector](size))
-
-  implicit class RichNumber(val n: Number) extends AnyVal {
-
-    def *(vector: Vector[Number]): Vector[Number] = {
-      vector.map(_ * n)
-    }
-  }
-
+  def randU[N <: Number: Uniform](size: Int, min: N, max: N)                = Dense.randU(size, min, max)
+  def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) = Dense.randG(size, mean, stdDev)
+  def randE[N <: Number: Exponential](size: Int, rate: N)                   = Dense.randE(size, rate)
 }
