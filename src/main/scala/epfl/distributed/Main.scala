@@ -1,22 +1,25 @@
 package epfl.distributed
 
-import java.util.concurrent.TimeUnit
-
 import epfl.distributed.core.core.Node
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.core.{Master, Slave}
 import epfl.distributed.data.Dataset
 import epfl.distributed.data.dtypes.{NaiveSparseVector, SparseVector}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Success}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 
 object Main extends App {
 
+  implicit class AwaitableFuture[T](f: Future[T]) {
+    def await: T = Await.result(f, Duration.Inf)
+  }
+
   type Data[T <: SparseVector[T]] = Array[(T, Int)]
 
-  val data: Data[NaiveSparseVector] = Dataset.rcv1(1000).map { case (x, y) =>
-    (x: NaiveSparseVector) -> y
+  val data: Data[NaiveSparseVector] = Dataset.rcv1(500).map {
+    case (x, y) =>
+      (x: NaiveSparseVector) -> y
   }
 
   val svm = new SparseSVM[NaiveSparseVector](0)
@@ -26,11 +29,16 @@ object Main extends App {
   val master = new Master(masterNode, data)
   val slaves = slaveNodes.map(sn => new Slave(sn, masterNode, data, svm))
 
-  master.gradient(1).onComplete {
-    case Success(res) => println(res)
-    case Failure(ex) => ex.printStackTrace()
-  }
+  val w0   = NaiveSparseVector.empty
+  val res0 = master.forward(w0).await
+  println(res0.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
 
-  master.server.awaitTermination(10, TimeUnit.SECONDS)
+  var w = w0
+  for (i <- 0 to 4) {
+    val w1 = master.gradient(epochs = 1, weights = w).await
+    val res1 = master.forward(w1).await
+    println(res1.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
+    w = w1
+  }
 
 }

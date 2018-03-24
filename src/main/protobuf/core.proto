@@ -17,7 +17,17 @@ message Ack {}
 
 
 service Slave {
+    rpc Forward (ForwardRequest) returns (ForwardReply) {}
     rpc Gradient (GradientRequest) returns (GradientReply) {}
+}
+
+message ForwardRequest {
+    repeated int32 samples = 1 [packed=true];
+    map<int32, double> weights = 4;
+}
+
+message ForwardReply {
+    repeated double predictions = 1 [packed=true];
 }
 
 message GradientRequest {

@@ -17,10 +17,22 @@ class Slave(node: Node, master: Node, data: Data[NaiveSparseVector], model: Spar
 
     // internal threadpool for work?
 
+    def forward(request: ForwardRequest): Future[ForwardReply] = Future {
+      val ForwardRequest(samplesIdx, weights) = request
+      val w                                   = weights: NaiveSparseVector
+
+      val preds = samplesIdx.map { idx =>
+        val (x, y) = data(idx)
+        model(w, x)
+      }
+
+      ForwardReply(preds)
+    }
+
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
       val receivedAt                                         = System.currentTimeMillis()
       val GradientRequest(samplesIdx, step, lambda, weights) = request
-      val w = weights: NaiveSparseVector
+      val w                                                  = weights: NaiveSparseVector
 
       val grad = samplesIdx
         .map { idx =>
@@ -30,7 +42,7 @@ class Slave(node: Node, master: Node, data: Data[NaiveSparseVector], model: Spar
         .reduce(_ + _)
 
       val terminatedAt = System.currentTimeMillis()
-      GradientReply(grad.m, receivedAt, terminatedAt)
+      GradientReply((grad * -step).m, receivedAt, terminatedAt)
     }
 
   }

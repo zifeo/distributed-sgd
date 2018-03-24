@@ -2,6 +2,7 @@ package epfl.distributed.core.ml
 
 import epfl.distributed.data.dtypes.SparseVector
 
+// need to transform into object
 class SparseSVM[T <: SparseVector[T]](lambda: Double = 0) {
 
   def apply(w: T, x: T): Double =
