@@ -10,7 +10,7 @@ class SparseSVM(lambda: Double = 0) {
 
   def gradient(w: Vec, x: Vec, y: Int): Vec = {
     val activity       = y * x.dot(w)
-    val regularization = (w * (lambda * 2.0 / w.nonZeroCount().toDouble)).sum
+    val regularization = (w * (lambda * 2.0 / w.nonZeroCount.toDouble)).sum
     val subgradient    = if (activity < 0) w.zerosLike else x * y
     subgradient + regularization
   }

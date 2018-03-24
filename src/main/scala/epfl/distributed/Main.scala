@@ -15,10 +15,10 @@ object Main extends App {
     def await: T = Await.result(f, Duration.Inf)
   }
 
-  type Data = Array[Vec]
+  type Data = Array[(Vec, Int)]
 
   val data: Data = Dataset.rcv1(500).map {
-    case (x, y) => Sparse(x, y)
+    case (x, y) => Sparse(x, x.size) -> y
   }
 
   val svm = new SparseSVM(0)

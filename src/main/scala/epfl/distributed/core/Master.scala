@@ -64,7 +64,7 @@ class Master(node: Node, data: Data) {
     val init    = Future.successful(weights)
     val workers = slaves.values().asScala.map(SlaveGrpc.stub)
     val piece   = Math.floorDiv(data.length, workers.size)
-    val dims    = data.map(_._1.nonzero).max
+    val dims    = data.map(_._1.nonZeroCount).max
 
     log.info(s"dims $dims")
 

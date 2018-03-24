@@ -4,9 +4,10 @@ import spire.math._
 
 case class Sparse(values: Map[Int, Number], size: Int) extends Vec {
   require(values.nonEmpty, "A vector cannot be empty")
+  require(values.size <= size, "The sparse vector contains more elements than its supposed size. Impossibru")
 
   override def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
-    require(other.size == size, "Can't perform element-wise operation on vectors of differnet length")
+    require(other.size == size, "Can't perform element-wise operation on vectors of different length")
 
     other match {
       case Sparse(otherValues, _) =>

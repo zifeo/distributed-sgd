@@ -54,6 +54,7 @@ trait Vec {
   }
 
   def nonZeroCount(epsilon: Number = 1e-20): Int
+  def nonZeroCount: Int = nonZeroCount()
 
   def nonZeroIndices(epsilon: Number = 1e-20): Iterable[Int]
 }
