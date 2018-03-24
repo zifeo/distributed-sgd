@@ -6,12 +6,14 @@ import kantan.codecs.resource.ResourceIterator
 import kantan.csv.ops._
 import kantan.csv._
 
+import spire.math.Number
+
 object Dataset {
 
   val folder = "./data"
 
   // CCAT transform to -1 or 1
-  def rcv1(entries: Int = 10): Array[(Map[Int, Double], Int)] = {
+  def rcv1(entries: Int = 10): Array[(Map[Int, Number], Int)] = {
     // not that safe
 
     val dataFiles   = (0 to 3).map(d => s"lyrl2004_vectors_test_pt$d.dat") :+ "lyrl2004_vectors_train.dat"
@@ -46,7 +48,7 @@ object Dataset {
               .filter(_.nonEmpty)
               .map { value =>
                 val Array(idx, weight) = value.split(':')
-                idx.toInt -> weight.toDouble
+                idx.toInt -> Number(weight)
               }
               .toMap
 

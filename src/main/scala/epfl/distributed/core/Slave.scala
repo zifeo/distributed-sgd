@@ -4,12 +4,15 @@ import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
 import epfl.distributed.core.ml.SparseSVM
+import epfl.distributed.data.{Sparse, Vec}
 import epfl.distributed.data.dtypes.NaiveSparseVector
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class Slave(node: Node, master: Node, data: Data[NaiveSparseVector], model: SparseSVM[NaiveSparseVector]) {
+import spire.math._
+
+class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
 
   private val log = Logger(s"slave--${pretty(node)}")
 
@@ -32,7 +35,7 @@ class Slave(node: Node, master: Node, data: Data[NaiveSparseVector], model: Spar
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
       val receivedAt                                         = System.currentTimeMillis()
       val GradientRequest(samplesIdx, step, lambda, weights) = request
-      val w                                                  = weights: NaiveSparseVector
+      val w                                                  = Sparse(weights, weights.size) //TODO What's the total vector size ?
 
       val grad = samplesIdx
         .map { idx =>

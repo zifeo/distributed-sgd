@@ -11,13 +11,13 @@ case class Sparse(values: Map[Int, Number], size: Int) extends Vec {
     other match {
       case Sparse(otherValues, _) =>
         Sparse(
-          values ++ otherValues.flatMap {
-            case (i, v2) =>
-              values.get(i).map(v1 => i -> op(v1, v2)).filter {
-                case (_, v) => abs(v) > Sparse.epsilon
-              }
-          },
-          size
+            values ++ otherValues.flatMap {
+              case (i, v2) =>
+                values.get(i).map(v1 => i -> op(v1, v2)).filter {
+                  case (_, v) => abs(v) > Sparse.epsilon
+                }
+            },
+            size
         )
 
       case Dense(otherValues) =>
@@ -36,15 +36,35 @@ case class Sparse(values: Map[Int, Number], size: Int) extends Vec {
   def apply(idx: Int): Number = {
     if (idx < 0 || idx > size) {
       throw new IndexOutOfBoundsException("Illegal index. Seriously ?")
-    } else {
+    }
+    else {
       values.getOrElse(idx, Number.zero)
     }
   }
 
   def apply(indices: Iterable[Int]): Sparse = Sparse(indices.map(i => i -> values(i)).toMap, size)
 
-  def nonZeroIndices(epsilon: Number = 1e-20): Iterable[Int] = values.keys
+  override def nonZeroIndices(epsilon: Number = 1e-20): Iterable[Int] = {
+    if (abs(epsilon) >= Sparse.epsilon) {
+      values.keys
+    }
+    else {
+      values.filter {
+        case (_, num) => abs(num) > Sparse.epsilon
+      }.keys
+    }
+  }
 
+  override def nonZeroCount(epsilon: Number = 1e-20): Int = {
+    if (abs(epsilon) >= Sparse.epsilon) {
+      size
+    }
+    else {
+      values.count {
+        case (_, num) => abs(num) > Sparse.epsilon
+      }
+    }
+  }
 }
 
 object Sparse {
@@ -56,6 +76,7 @@ object Sparse {
   def zeros(size: Int): Sparse               = Sparse(Map[Int, Number]().withDefaultValue(Number.zero), size)
   def ones(size: Int): Sparse                = Sparse(Map[Int, Number]().withDefaultValue(Number.one), size)
   def fill(value: Number, size: Int): Sparse = Sparse(Map[Int, Number]().withDefaultValue(value), size)
+
   def oneHot(value: Number, index: Int, size: Int): Sparse =
     Sparse(Map[Int, Number]().withDefaultValue(Number.zero) + (index -> value), size)
 

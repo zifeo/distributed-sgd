@@ -47,6 +47,15 @@ trait Vec {
 
     (this * other).sum
   }
+
+  def zerosLike: Vec = this match {
+    case _: Dense  => Dense.zeros(this.size)
+    case _: Sparse => Sparse.zeros(this.size)
+  }
+
+  def nonZeroCount(epsilon: Number = 1e-20): Int
+
+  def nonZeroIndices(epsilon: Number = 1e-20): Iterable[Int]
 }
 
 object Vec {

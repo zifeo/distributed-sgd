@@ -36,9 +36,21 @@ case class Dense(v: IndexedSeq[Number]) extends Vec with IndexedSeqOptimized[Num
           case (_, num) => abs(num) > Sparse.epsilon
         }
         .toMap,
-      length
+      size
     )
   }
+
+  def nonZeroIndices(epsilon: Number = 1e-20): Iterable[Int] = {
+    v.indices.view
+      .zip(v)
+      .filter {
+        case (_, num) => abs(num) > Sparse.epsilon
+      }
+      .map(_._1)
+      .force
+  }
+
+  override def nonZeroCount(epsilon: Number): Int = v.count(abs(_) < Sparse.epsilon)
 
   /*
   Methods implementing IndexedSeqOptimized

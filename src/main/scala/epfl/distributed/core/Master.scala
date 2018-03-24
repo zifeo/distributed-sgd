@@ -12,7 +12,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-class Master(node: Node, data: Data[NaiveSparseVector]) {
+class Master(node: Node, data: Data) {
 
   private val log    = Logger(s"master-${pretty(node)}")
   private val slaves = new ConcurrentHashMap[Node, ManagedChannel]()
