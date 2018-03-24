@@ -12,7 +12,7 @@ case class F(f: Dense => Number) {
       v.zipWithIndex.map {
         case (xi, idx) =>
           val xiBigD = xi.toBigDecimal
-          (f(Sparse.oneHot(xiBigD + delta, v.size, idx)) - f(Sparse.oneHot(xiBigD - delta, v.size, idx))) / (2 * delta)
+          (f(Dense.oneHot(xiBigD + delta, v.size, idx)) - f(Dense.oneHot(xiBigD - delta, v.size, idx))) / (2 * delta)
       }
     )
   }

@@ -13,7 +13,7 @@ case class Sparse(values: Map[Int, Number], size: Int) extends Vec {
         Sparse(
           values ++ otherValues.flatMap {
             case (i, v2) =>
-              values.get(i).map(v1 => i -> op(v1 + v2)).filter {
+              values.get(i).map(v1 => i -> op(v1, v2)).filter {
                 case (_, v) => abs(v) > Sparse.epsilon
               }
           },

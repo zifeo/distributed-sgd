@@ -1,14 +1,14 @@
 package epfl.distributed.core.ml
 
-import epfl.distributed.data.dtypes.SparseVector
+import epfl.distributed.data.Vec
+import spire.math._
 
-// need to transform into object
-class SparseSVM[T <: SparseVector[T]](lambda: Double = 0) {
+class SparseSVM(lambda: Double = 0) {
 
-  def apply(w: T, x: T): Double =
-    Math.max(1 - x.dot(w), 0)
+  def apply(w: Vec, x: Vec): Number =
+    (1 - x.dot(w)) max 0
 
-  def gradient(w: T, x: T, y: Int): T = {
+  def gradient(w: Vec, x: Vec, y: Int): Vec = {
     val activity       = y * x.dot(w)
     val regularization = (w * (lambda * 2.0 / w.nonzero.toDouble)).sum
     val subgradient    = if (activity < 0) w.emptyLike else x * y
