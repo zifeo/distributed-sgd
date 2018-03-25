@@ -2,7 +2,7 @@ package epfl.distributed.data
 
 import spire.math._
 
-class Sparse private (val map: Map[Int, Number], val size: Int) extends Vec {
+class Sparse private (override val map: Map[Int, Number], val size: Int) extends Vec {
 
   override def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
     require(other.size == size, "Can't perform element-wise operation on vectors of different length")
@@ -86,6 +86,11 @@ object Sparse {
           .withDefaultValue(Number.zero),
         size
     )
+  }
+
+  def apply[A: Numeric](m: Map[Int, A], size: Int): Sparse = {
+    val num = implicitly[Numeric[A]]
+    Sparse(m.mapValues(num.toNumber), size)
   }
 
   def zeros(size: Int): Sparse                             = Sparse(Map[Int, Number](), size)

@@ -15,11 +15,10 @@ class VecTests extends Spec {
 
         v1 + v2 shouldBe Vec(2, 4, 6)
         v1 dot v2 shouldBe (1 + 4 + 9)
-        v1 * 2 shouldBe Vec(1, 4, 9)
+        v1 * 2 shouldBe Vec(2, 4, 6)
         v1.norm shouldBe Math.sqrt(1 + 4 + 9)
 
       }
-
 
     }
 

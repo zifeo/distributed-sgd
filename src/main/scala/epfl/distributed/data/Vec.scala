@@ -1,6 +1,6 @@
 package epfl.distributed.data
 
-import spire.math.{Number, sqrt}
+import spire.math.{Number, Numeric, sqrt}
 import spire.random.{Exponential, Gaussian, Uniform}
 
 trait Vec {
@@ -14,6 +14,8 @@ trait Vec {
   def foldLeft[B](init: B)(op: (B, Number) => B): B
 
   def sparse: Sparse
+
+  def map: Map[Int, Number]
 
   def +(other: Vec): Vec = elementWiseOp(other, _ + _)
 
@@ -64,6 +66,11 @@ object Vec {
 
   def apply(size: Int, values: (Int, Number)*): Sparse   = Sparse(values.toMap, size)
   def apply(size: Int, values: Map[Int, Number]): Sparse = Sparse(values, size)
+
+  def apply[A: Numeric](m: Map[Int, A], size: Int): Sparse = {
+    val num = implicitly[Numeric[A]]
+    Sparse(m.mapValues(num.toNumber), size)
+  }
 
   def zeros(size: Int): Dense                             = Dense.zeros(size)
   def ones(size: Int): Dense                              = Dense.ones(size)

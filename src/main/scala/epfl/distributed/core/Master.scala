@@ -5,7 +5,7 @@ import java.util.concurrent.ConcurrentHashMap
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
-import epfl.distributed.data.dtypes.NaiveSparseVector
+import epfl.distributed.data.Vec
 import io.grpc.ManagedChannel
 
 import scala.collection.JavaConverters._
@@ -42,23 +42,21 @@ class Master(node: Node, data: Data) {
 
   log.info("ready")
 
-  def forward(weights: NaiveSparseVector): Future[Array[Double]] = {
+  def forward(weights: Vec): Future[Array[Double]] = {
     val workers = slaves.values().asScala.map(SlaveGrpc.stub)
     val piece   = Math.floorDiv(data.length, workers.size)
 
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
-        val req    = ForwardRequest(sample until (sample + piece), weights.m)
+        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble)) //TODO Possible loss of precision if Number was BigDecimal. Fix this
         worker.forward(req)
     }
 
     Future.sequence(work).map(_.flatMap(_.predictions).toArray)
   }
 
-  def gradient(epochs: Int,
-               batch: Int = 1,
-               weights: NaiveSparseVector = NaiveSparseVector.empty): Future[NaiveSparseVector] = {
+  def gradient(epochs: Int, batch: Int = 1, weights: Vec): Future[Vec] = {
     log.info(s"dsgd start")
 
     val init    = Future.successful(weights)
@@ -82,7 +80,7 @@ class Master(node: Node, data: Data) {
                   case (worker, i) =>
                     val sample = i * piece + step
                     val req =
-                      GradientRequest(sample until Math.min(sample + batch, i * piece + piece), 0.1, 0, weights.m)
+                      GradientRequest(sample until Math.min(sample + batch, i * piece + piece), 0.1, 0, weights.map.mapValues(_.toDouble))
                     worker.gradient(req).map { res =>
                       require(!res.grad.values.exists(_.isNaN), "NaN detected")
                       res
@@ -91,14 +89,14 @@ class Master(node: Node, data: Data) {
                 Future
                   .sequence(work)
                   .map { res =>
-                    val grad        = res.map(_.grad: NaiveSparseVector).reduce(_ + _)
+                    val grad        = res.map(grad => Vec(grad.grad)).reduce(_ + _)
                     val durations   = res.map(x => x.terminatedAt - x.startedAt)
                     val durationMax = durations.max / 1000.0
                     val durationMin = durations.min / 1000.0
                     val durationAvg = durations.sum / 1000.0 / durations.size
-                    val sparsity    = if (grad.nonzero > 0) 100 else 100 - 100 * grad.nonzero.toDouble / dims
+                    val sparsity    = if (grad.nonZeroCount > 0) 100 else 100 - 100 * grad.nonZeroCount.toDouble / dims
                     log.trace(
-                      f"$epoch.$step duration $sparsity%.2f ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
+                        f"$epoch.$step duration $sparsity%.2f ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
                     weights + grad
                   }
               }

@@ -4,9 +4,7 @@ import spire.math._
 import spire.random.rng.Cmwc5
 import spire.random.{Exponential, Gaussian, Uniform}
 
-import scala.collection.{IndexedSeqOptimized, mutable}
-
-case class Dense(v: IndexedSeq[Number]) extends Vec with IndexedSeqOptimized[Number, IndexedSeq[Number]] {
+case class Dense(v: IndexedSeq[Number]) extends Vec {
   require(v.nonEmpty, "A vector cannot be empty")
 
   def apply(indices: Iterable[Int]): Dense = Dense(indices.map(v(_)).toIndexedSeq)
@@ -17,9 +15,9 @@ case class Dense(v: IndexedSeq[Number]) extends Vec with IndexedSeqOptimized[Num
     other match {
       case Dense(otherValues) =>
         Dense(
-          v zip otherValues map {
-            case (e1, e2) => op(e1, e2)
-          }
+            v zip otherValues map {
+              case (e1, e2) => op(e1, e2)
+            }
         )
 
       case s: Sparse => s.elementWiseOp(this, op)
@@ -28,15 +26,21 @@ case class Dense(v: IndexedSeq[Number]) extends Vec with IndexedSeqOptimized[Num
 
   override def mapValues(op: Number => Number): Vec = Dense(v.map(op))
 
+  override def size: Int = v.size
+
+  override def foldLeft[B](init: B)(op: (B, Number) => B): B = v.foldLeft(init)(op)
+
+  override def map: Map[Int, Number] = v.indices.zip(v).toMap
+
   override def sparse: Sparse = {
     Sparse(
-      v.indices
-        .zip(v)
-        .filter {
-          case (_, num) => abs(num) > Sparse.epsilon
-        }
-        .toMap,
-      size
+        v.indices
+          .zip(v)
+          .filter {
+            case (_, num) => abs(num) > Sparse.epsilon
+          }
+          .toMap,
+        size
     )
   }
 
@@ -51,20 +55,6 @@ case class Dense(v: IndexedSeq[Number]) extends Vec with IndexedSeqOptimized[Num
   }
 
   override def nonZeroCount(epsilon: Number): Int = v.count(abs(_) < Sparse.epsilon)
-
-  /*
-  Methods implementing IndexedSeqOptimized
-   */
-
-  def apply(idx: Int): Number = v(idx)
-
-  override def repr: IndexedSeq[Number] = v
-
-  def seq: IndexedSeq[Number] = v
-
-  protected[this] def newBuilder: mutable.Builder[Number, IndexedSeq[Number]] = IndexedSeq.newBuilder[Number]
-
-  override def length: Int = v.length
 }
 
 object Dense {
@@ -79,6 +69,7 @@ object Dense {
   implicit private[this] val rng: Cmwc5 = Cmwc5()
 
   def randU[N <: Number: Uniform](size: Int, min: N, max: N) = Dense(Uniform(min, max).sample[Vector](size))
+
   def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) =
     Dense(Gaussian(mean, stdDev).sample[Vector](size))
   def randE[N <: Number: Exponential](size: Int, rate: N) = Dense(Exponential(rate).sample[Vector](size))

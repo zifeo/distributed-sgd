@@ -4,13 +4,10 @@ import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
 import epfl.distributed.core.ml.SparseSVM
-import epfl.distributed.data.{Sparse, Vec}
-import epfl.distributed.data.dtypes.NaiveSparseVector
+import epfl.distributed.data.Sparse
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-
-import spire.math._
 
 class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
 
@@ -22,14 +19,14 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
 
     def forward(request: ForwardRequest): Future[ForwardReply] = Future {
       val ForwardRequest(samplesIdx, weights) = request
-      val w                                   = weights: NaiveSparseVector
+      val w                                   = Sparse(weights, weights.size) //TODO What's the total vector size ?
 
       val preds = samplesIdx.map { idx =>
         val (x, y) = data(idx)
         model(w, x)
       }
 
-      ForwardReply(preds)
+      ForwardReply(preds.map(_.toDouble)) //TODO Possible loss of precision if Number was BigDecimal. Fix this
     }
 
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
@@ -45,7 +42,7 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
         .reduce(_ + _)
 
       val terminatedAt = System.currentTimeMillis()
-      GradientReply((grad * -step).m, receivedAt, terminatedAt)
+      GradientReply((grad * -step).map.mapValues(_.toDouble), receivedAt, terminatedAt)
     }
 
   }
