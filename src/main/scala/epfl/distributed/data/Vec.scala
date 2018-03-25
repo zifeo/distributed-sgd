@@ -15,8 +15,6 @@ trait Vec {
 
   def sparse: Sparse
 
-  def nonZeroIndices: Iterable[Int] = sparse.values.keys
-
   def +(other: Vec): Vec = elementWiseOp(other, _ + _)
 
   def +(scalar: Number): Vec = mapValues(_ + scalar)
