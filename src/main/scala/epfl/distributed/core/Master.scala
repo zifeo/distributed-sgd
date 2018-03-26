@@ -62,7 +62,7 @@ class Master(node: Node, data: Data) {
     val init    = Future.successful(weights)
     val workers = slaves.values().asScala.map(SlaveGrpc.stub)
     val piece   = Math.floorDiv(data.length, workers.size)
-    val dims    = data.map(_._1.nonZeroCount).max
+    val dims    = data.map(_._1.nonZeroCount()).max
 
     log.info(s"dims $dims")
 
@@ -89,12 +89,12 @@ class Master(node: Node, data: Data) {
                 Future
                   .sequence(work)
                   .map { res =>
-                    val grad        = res.map(grad => Vec(grad.grad)).reduce(_ + _)
+                    val grad        = res.map(grad => Vec(grad.grad, 100)).fold(Vec.zeros(100))(_ + _) //TODO Input correct size !
                     val durations   = res.map(x => x.terminatedAt - x.startedAt)
                     val durationMax = durations.max / 1000.0
                     val durationMin = durations.min / 1000.0
                     val durationAvg = durations.sum / 1000.0 / durations.size
-                    val sparsity    = if (grad.nonZeroCount > 0) 100 else 100 - 100 * grad.nonZeroCount.toDouble / dims
+                    val sparsity    = if (grad.nonZeroCount() > 0) 100 else 100 - 100 * grad.nonZeroCount().toDouble / dims
                     log.trace(
                         f"$epoch.$step duration $sparsity%.2f ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
                     weights + grad
