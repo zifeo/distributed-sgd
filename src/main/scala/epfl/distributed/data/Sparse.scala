@@ -76,7 +76,6 @@ object Sparse {
   def apply(size: Int, values: (Int, Number)*): Sparse = Sparse(values.toMap, size)
 
   def apply(m: Map[Int, Number], size: Int): Sparse = {
-    require(m.nonEmpty, "A vector cannot be empty")
     require(m.size <= size, "The sparse vector contains more elements than its defined size. Impossibru")
 
     new Sparse(
