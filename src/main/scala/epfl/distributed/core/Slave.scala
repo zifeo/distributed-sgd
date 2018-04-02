@@ -1,21 +1,22 @@
 package epfl.distributed.core
 
+import java.util.concurrent.Executors
+
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
+import epfl.distributed.Utils
 import epfl.distributed.core.core._
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.data.Sparse
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
 
-  private val log = Logger(s"slave--${pretty(node)}")
+  val log                           = Logger(s"slave--${pretty(node)}")
+  implicit val ec: ExecutionContext = Utils.newFixedExecutor()
 
   class SlaveImpl extends SlaveGrpc.Slave {
-
-    // internal threadpool for work?
 
     def forward(request: ForwardRequest): Future[ForwardReply] = Future {
       val ForwardRequest(samplesIdx, weights) = request
@@ -47,10 +48,10 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
 
   }
 
-  // new thread pool for dispatcher
-  val server = newServer(SlaveGrpc.bindService(new SlaveImpl, global), node.port)
+  val server = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
   server.start()
 
+  // register slave node
   val masterChannel = newChannel(master.ip, master.port)
   val masterStub    = MasterGrpc.blockingStub(masterChannel)
   masterStub.registerSlave(node)

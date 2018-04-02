@@ -4,18 +4,19 @@ import java.util.concurrent.ConcurrentHashMap
 
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
+import epfl.distributed.Utils
 import epfl.distributed.core.core._
 import epfl.distributed.data.Vec
 import io.grpc.ManagedChannel
 
 import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class Master(node: Node, data: Data) {
 
-  private val log    = Logger(s"master-${pretty(node)}")
-  private val slaves = new ConcurrentHashMap[Node, ManagedChannel]()
+  private val log                   = Logger(s"master-${pretty(node)}")
+  private val slaves                = new ConcurrentHashMap[Node, ManagedChannel]()
+  implicit val ec: ExecutionContext = Utils.newFixedExecutor()
 
   class MasterImpl extends MasterGrpc.Master {
 
@@ -36,8 +37,7 @@ class Master(node: Node, data: Data) {
 
   }
 
-  // new thread pool for dispatcher
-  val server = newServer(MasterGrpc.bindService(new MasterImpl, global), node.port)
+  val server = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
   server.start()
 
   log.info("ready")
@@ -49,7 +49,7 @@ class Master(node: Node, data: Data) {
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
-        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble)) //TODO Possible loss of precision if Number was BigDecimal. Fix this
+        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble)) //TODO Possible loss of precision if Number was BigDecimal. Fix this (Teo: in which case would that be the case?)
         worker.forward(req)
     }
 
@@ -80,7 +80,11 @@ class Master(node: Node, data: Data) {
                   case (worker, i) =>
                     val sample = i * piece + step
                     val req =
-                      GradientRequest(sample until Math.min(sample + batch, i * piece + piece), 0.1, 0, weights.map.mapValues(_.toDouble))
+                      GradientRequest(
+                          sample until Math.min(sample + batch, i * piece + piece),
+                          0.1,
+                          0,
+                          weights.map.mapValues(_.toDouble))
                     worker.gradient(req).map { res =>
                       require(!res.grad.values.exists(_.isNaN), "NaN detected")
                       res
