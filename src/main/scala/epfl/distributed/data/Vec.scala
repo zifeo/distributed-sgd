@@ -80,4 +80,5 @@ object Vec {
   def randU[N <: Number: Uniform](size: Int, min: N, max: N)                = Dense.randU(size, min, max)
   def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) = Dense.randG(size, mean, stdDev)
   def randE[N <: Number: Exponential](size: Int, rate: N)                   = Dense.randE(size, rate)
+
 }

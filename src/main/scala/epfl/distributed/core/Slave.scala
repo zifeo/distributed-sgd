@@ -1,7 +1,5 @@
 package epfl.distributed.core
 
-import java.util.concurrent.Executors
-
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
 import epfl.distributed.Utils
@@ -38,7 +36,7 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
       val grad = samplesIdx
         .map { idx =>
           val (x, y) = data(idx)
-          model.gradient(w, x, y)
+          model.backward(w, x, y)
         }
         .reduce(_ + _)
 
