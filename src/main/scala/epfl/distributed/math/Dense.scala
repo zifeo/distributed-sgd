@@ -1,4 +1,4 @@
-package epfl.distributed.data
+package epfl.distributed.math
 
 import spire.math._
 import spire.random.rng.Cmwc5

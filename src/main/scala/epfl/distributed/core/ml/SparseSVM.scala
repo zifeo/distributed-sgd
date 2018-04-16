@@ -1,6 +1,6 @@
 package epfl.distributed.core.ml
 
-import epfl.distributed.data.Vec
+import epfl.distributed.math.Vec
 import spire.math._
 
 /**

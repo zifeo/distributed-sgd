@@ -4,9 +4,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
-import epfl.distributed.Utils
 import epfl.distributed.core.core._
-import epfl.distributed.data.Vec
+import epfl.distributed.math.Vec
+import epfl.distributed.utils.Pool
 import io.grpc.ManagedChannel
 
 import scala.collection.JavaConverters._
@@ -16,7 +16,7 @@ class Master(node: Node, data: Data) {
 
   private val log                   = Logger(s"master-${pretty(node)}")
   private val slaves                = new ConcurrentHashMap[Node, ManagedChannel]()
-  implicit val ec: ExecutionContext = Utils.newFixedExecutor()
+  implicit val ec: ExecutionContext = Pool.newFixedExecutor()
 
   class MasterImpl extends MasterGrpc.Master {
 
@@ -49,14 +49,14 @@ class Master(node: Node, data: Data) {
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
-        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble)) //TODO Possible loss of precision if Number was BigDecimal. Fix this (Teo: in which case would that be the case?)
+        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
         worker.forward(req)
     }
 
     Future.sequence(work).map(_.flatMap(_.predictions).toArray)
   }
 
-  def gradient(epochs: Int, batch: Int = 1, weights: Vec): Future[Vec] = {
+  def backward(epochs: Int, batch: Int = 1, weights: Vec): Future[Vec] = {
     log.info(s"dsgd start")
 
     val init    = Future.successful(weights)
@@ -93,7 +93,7 @@ class Master(node: Node, data: Data) {
                 Future
                   .sequence(work)
                   .map { res =>
-                    val grad        = res.map(grad => Vec(grad.grad, 100)).fold(Vec.zeros(100))(_ + _) //TODO Input correct size !
+                    val grad        = res.map(grad => Vec(grad.grad, weights.size)).fold(Vec.zeros(weights.size))(_ + _)
                     val durations   = res.map(x => x.terminatedAt - x.startedAt)
                     val durationMax = durations.max / 1000.0
                     val durationMin = durations.min / 1000.0

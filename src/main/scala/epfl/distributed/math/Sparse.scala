@@ -1,4 +1,4 @@
-package epfl.distributed.data
+package epfl.distributed.math
 
 import spire.math._
 

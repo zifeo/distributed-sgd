@@ -1,11 +1,9 @@
-package epfl.distributed.data
+package epfl.distributed.utils
 
 import better.files.File
-import epfl.distributed.Main.Data
 import kantan.codecs.resource.ResourceIterator
-import kantan.csv.ops._
 import kantan.csv._
-
+import kantan.csv.ops._
 import spire.math.Number
 
 object Dataset {
