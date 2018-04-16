@@ -13,7 +13,7 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
         val zeros_vec_b      = otherSparseArray.sparseVec._2.map(q => (Number.zero, q))
         val combined_indices = this.sparseVec._1 ++ otherSparseArray.sparseVec._1
         val combined_values  = zeros_vec_a ++ zeros_vec_b
-        val sorted           = order_by_index((combined_indices, combined_values))
+        val sorted           = orderByIndex((combined_indices, combined_values))
 
         val map: Map[Int, ((Number, Number), Int)] = Map()
         val test = sorted._2.foldLeft(map)((acc, tuple) => {
@@ -72,10 +72,6 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
     }
   }
 
-  def nonZeroCount(): Int = {
-    this.sparseVec._1.length
-  }
-
   def mapValues(op: Number => Number): SparseArrayVector = {
 
     val result = this.sparseVec._2.map(data => op(data))
@@ -83,19 +79,7 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
     SparseArrayVector((this.sparseVec._1, result), this.size)
   }
 
-  def nonZeroIndices(): List[Int] = {
-    this.sparseVec._1
-  }
-
-  def zeros_like(dimension: Int): SparseArrayVector = {
-
-    val zero_vec = List.fill(dimension)(Number.zero)
-    val indices  = List.range(0, dimension)
-
-    SparseArrayVector((indices, zero_vec), dimension)
-  }
-
-  def order_by_index(input: (List[Int], List[(Number, Number)])): (List[Int], List[((Number, Number), Int)]) = {
+  private[this] def orderByIndex(input: (List[Int], List[(Number, Number)])): (List[Int], List[((Number, Number), Int)]) = {
 
     var indices = input._1.zipWithIndex
     var values  = input._2.zipWithIndex
