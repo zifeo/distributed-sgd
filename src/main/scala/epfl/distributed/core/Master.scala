@@ -49,7 +49,7 @@ class Master(node: Node, data: Data) {
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
-        assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in forward weights")
+        //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in forward weights")
         val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
         worker.forward(req)
     }
