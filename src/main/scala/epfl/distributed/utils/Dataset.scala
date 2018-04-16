@@ -11,7 +11,7 @@ object Dataset {
   val folder = "data"
 
   // CCAT transform to -1 or 1
-  def rcv1(entries: Int = 10): Array[(Map[Int, Number], Int)] = {
+  def rcv1(entries: Option[Int] = None): Array[(Map[Int, Number], Int)] = {
     // not that safe
 
     val dataFiles   = (0 to 3).map(d => s"lyrl2004_vectors_test_pt$d.dat") :+ "lyrl2004_vectors_train.dat"
@@ -53,11 +53,10 @@ object Dataset {
             weights -> targets(did)
           }.toOption
         }
-        .take(entries)
         .flatten
-        .toArray
 
-    data
+    entries.fold(data.toArray)(data.take(_).toArray)
   }
 
+  def rcv1(entries: Int): Array[(Map[Int, Number], Int)] = rcv1(Some(entries))
 }

@@ -1,7 +1,5 @@
 package epfl.distributed.core
 
-import java.util.concurrent.ConcurrentHashMap
-
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
@@ -10,19 +8,21 @@ import epfl.distributed.math.Vec
 import epfl.distributed.utils.{Config, Pool}
 import io.grpc.ManagedChannel
 
-import scala.collection.JavaConverters._
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 
 class Master(data: Data) {
 
   val config = pureconfig.loadConfigOrThrow[Config]
 
-  private val svm = new SparseSVM(0)
+  private val svm = new SparseSVM(0.01)
 
   private val node = Node("127.0.0.1", config.masterPort)
 
-  private val log                   = Logger(s"master-${pretty(node)}")
-  private val slaves                = new ConcurrentHashMap[Node, ManagedChannel]()
+  private val log = Logger(s"master-${pretty(node)}")
+
+  private val slaves                = TrieMap[Node, ManagedChannel]()
+
   implicit val ec: ExecutionContext = Pool.newFixedExecutor()
 
   class MasterImpl extends MasterGrpc.Master {
@@ -53,7 +53,7 @@ class Master(data: Data) {
   }
 
   def forward(weights: Vec): Future[Array[Double]] = {
-    val workers = slaves.values().asScala.map(SlaveGrpc.stub) //TODO extract this outside the method
+    val workers = slaves.values.map(SlaveGrpc.stub)
     val piece   = Math.floorDiv(data.length, workers.size)
 
     val work = workers.zipWithIndex.map {
@@ -72,9 +72,8 @@ class Master(data: Data) {
     //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in initial weights")
 
     val init             = Future.successful(weights)
-    val workers          = slaves.values().asScala.map(SlaveGrpc.stub)
-    val workersWithIndex = workers.zipWithIndex
-    val piece            = Math.floorDiv(data.length, workers.size)
+    val workersWithIndex = slaves.values.map(SlaveGrpc.stub).zipWithIndex
+    val piece            = Math.floorDiv(data.length, workersWithIndex.size)
     val dims             = data.map(_._1.nonZeroCount()).max
 
     log.info(s"dims $dims")
