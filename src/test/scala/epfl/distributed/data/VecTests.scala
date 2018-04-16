@@ -1,6 +1,7 @@
 package epfl.distributed.data
 
 import epfl.distributed.Spec
+import epfl.distributed.math.Vec
 
 class VecTests extends Spec {
 

@@ -8,7 +8,7 @@ import spire.math.Number
 
 object Dataset {
 
-  val folder = "./data"
+  val folder = "data"
 
   // CCAT transform to -1 or 1
   def rcv1(entries: Int = 10): Array[(Map[Int, Number], Int)] = {

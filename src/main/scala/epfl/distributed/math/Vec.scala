@@ -13,7 +13,7 @@ trait Vec {
 
   def foldLeft[B](init: B)(op: (B, Number) => B): B
 
-  def sparse: Sparse
+  def sparse: Vec
 
   def map: Map[Int, Number]
 

@@ -52,7 +52,7 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
     }
     else {
       map.filter {
-        case (_, num) => abs(num) > Sparse.epsilon
+        case (_, num) => abs(num) > epsilon
       }.keys
     }
   }
@@ -63,7 +63,7 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
     }
     else {
       map.count {
-        case (_, num) => abs(num) > Sparse.epsilon
+        case (_, num) => abs(num) > epsilon
       }
     }
   }
