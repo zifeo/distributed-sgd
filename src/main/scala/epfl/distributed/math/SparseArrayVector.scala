@@ -3,7 +3,6 @@ package epfl.distributed.math
 import spire.math._
 
 case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) extends Vec {
-  sparseVec._2(0).compare()
 
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
     require(other.size == size, "Can't perform element-wise operation on vectors of different length")
@@ -117,7 +116,7 @@ object SparseArrayVector {
     require(m.size <= size, "The sparse vector contains more elements than its defined size. Impossibru")
 
     val filtered = m.filter {
-      case (_, num) => abs(num) > Sparse.epsilon
+      case (_, num) => abs(num) > epsilon
     }
     SparseArrayVector((filtered.keys.toList, filtered.values.toList), size)
   }
