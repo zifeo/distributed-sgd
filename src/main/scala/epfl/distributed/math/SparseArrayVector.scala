@@ -79,7 +79,8 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
     SparseArrayVector((this.sparseVec._1, result), this.size)
   }
 
-  private[this] def orderByIndex(input: (List[Int], List[(Number, Number)])): (List[Int], List[((Number, Number), Int)]) = {
+  private[this] def orderByIndex(
+      input: (List[Int], List[(Number, Number)])): (List[Int], List[((Number, Number), Int)]) = {
 
     var indices = input._1.zipWithIndex
     var values  = input._2.zipWithIndex

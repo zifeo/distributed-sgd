@@ -39,6 +39,7 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
           model.backward(w, x, y)
         }
         .reduce(_ + _)
+
       val gradResp = (grad * -step).map.mapValues(_.toDouble)
       //require(!gradResp.values.exists(_.isNaN), "NaN detected in grad response")
 

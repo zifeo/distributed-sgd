@@ -48,7 +48,7 @@ class Master(data: Data) {
 
   log.info("ready")
 
-  config.slaves.addresses.zip(config.slaves.ports).foreach {
+  val slaveNodes = config.slaves.addresses.zip(config.slaves.ports).foreach {
     case (address, port) => new Slave(Node(address, port), node, data, svm)
   }
 
@@ -110,7 +110,7 @@ class Master(data: Data) {
                     val durationMin = durations.min / 1000.0
                     val durationAvg = durations.sum / 1000.0 / durations.size
                     val sparsity    = 100 * grad.sparsity()
-                    log.debug(
+                    log.trace(
                         f"$epoch:$step sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
                     weights + grad
                   }
