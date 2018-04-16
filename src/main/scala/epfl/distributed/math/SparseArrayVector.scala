@@ -3,6 +3,7 @@ package epfl.distributed.math
 import spire.math._
 
 case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) extends Vec {
+  sparseVec._2(0).compare()
 
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
     require(other.size == size, "Can't perform element-wise operation on vectors of different length")
@@ -121,6 +122,11 @@ object SparseArrayVector {
     SparseArrayVector((filtered.keys.toList, filtered.values.toList), size)
   }
 
+  def apply[A: Numeric](m: Map[Int, A], size: Int): SparseArrayVector = {
+    val num = implicitly[Numeric[A]]
+    apply(m.mapValues(num.toNumber), size)
+  }
+
   def apply(input: Iterator[String], dim: Int): SparseArrayVector = {
     SparseArrayVector(csrFormat(input), dim)
   }
@@ -140,4 +146,6 @@ object SparseArrayVector {
     val parser = row.split(" ").map(f => f.split(":")).map(f => (f(0).toInt, Number(f(1)))).toList
     parser
   }
+
+  def zeros(size: Int): SparseArrayVector = SparseArrayVector((List(), List()), size)
 }

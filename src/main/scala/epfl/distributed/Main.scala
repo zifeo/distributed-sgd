@@ -3,7 +3,7 @@ package epfl.distributed
 import epfl.distributed.core.core.Node
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.core.{Master, Slave}
-import epfl.distributed.math.{Sparse, Vec}
+import epfl.distributed.math.{SparseArrayVector, Vec}
 import epfl.distributed.utils.{Dataset, Pool}
 
 object Main extends App {
@@ -14,15 +14,15 @@ object Main extends App {
   val featuresCount = 47236
 
   val data: Data = Dataset.rcv1(500).map {
-    case (x, y) => Sparse(x, featuresCount) -> y
+    case (x, y) => SparseArrayVector(x, featuresCount) -> y
   }
 
   val svm = new SparseSVM(0)
 
   // create nodes
   val masterNode :: slaveNodes = (0 to 3).map(p => Node("127.0.0.1", 4000 + p)).toList
-  val master = new Master(masterNode, data)
-  val slaves = slaveNodes.map(sn => new Slave(sn, masterNode, data, svm))
+  val master                   = new Master(masterNode, data)
+  val slaves                   = slaveNodes.map(sn => new Slave(sn, masterNode, data, svm))
 
   val w0   = Vec.zeros(featuresCount)
   val res0 = master.forward(w0).await

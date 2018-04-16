@@ -72,7 +72,7 @@ object Vec {
     Sparse(m.mapValues(num.toNumber), size)
   }
 
-  def zeros(size: Int): Vec                               = Sparse.zeros(size)
+  def zeros(size: Int): Vec                               = SparseArrayVector.zeros(size)
   def ones(size: Int): Vec                                = Dense.ones(size)
   def fill(value: Number, size: Int): Dense               = Dense.fill(value, size)
   def oneHot(value: Number, index: Int, size: Int): Dense = Dense.oneHot(value, index, size)

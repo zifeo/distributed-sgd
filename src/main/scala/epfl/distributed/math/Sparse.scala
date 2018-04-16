@@ -67,6 +67,13 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
       }
     }
   }
+
+  def canEqual(a: Any): Boolean = a.isInstanceOf[Sparse]
+
+  override def equals(that: Any): Boolean = that match {
+    case sparse: Sparse => sparse.size == size && sparse.map == map
+    case _              => false
+  }
 }
 
 object Sparse {

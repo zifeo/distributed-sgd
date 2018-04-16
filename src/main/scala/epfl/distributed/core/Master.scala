@@ -43,12 +43,13 @@ class Master(node: Node, data: Data) {
   log.info("ready")
 
   def forward(weights: Vec): Future[Array[Double]] = {
-    val workers = slaves.values().asScala.map(SlaveGrpc.stub)
+    val workers = slaves.values().asScala.map(SlaveGrpc.stub) //TODO extract this outside the method
     val piece   = Math.floorDiv(data.length, workers.size)
 
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
+        assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in forward weights")
         val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
         worker.forward(req)
     }
@@ -59,8 +60,13 @@ class Master(node: Node, data: Data) {
   def backward(epochs: Int, batch: Int = 1, weights: Vec): Future[Vec] = {
     log.info(s"dsgd start")
 
+    assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in initial weights")
+    log.debug("Initial weights size: " + weights.size)
+    log.debug("Initial weights values: " + weights.map.take(10)) // TODO Remove
+
     val init    = Future.successful(weights)
     val workers = slaves.values().asScala.map(SlaveGrpc.stub)
+    val workersWithIndex = workers.zipWithIndex
     val piece   = Math.floorDiv(data.length, workers.size)
     val dims    = data.map(_._1.nonZeroCount()).max
 
@@ -72,20 +78,25 @@ class Master(node: Node, data: Data) {
 
         (0 until piece by batch).foldLeft(weightsEpoch) {
           case (weightStep, step) =>
-            //log.debug(s"step $step")
+            log.debug(s"step ${step + 1} / $piece")
+
 
             weightStep
               .flatMap { weights =>
-                val work = workers.zipWithIndex.map {
+                val work = workersWithIndex.map {
                   case (worker, i) =>
                     val sample = i * piece + step
+
+                    assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in values")
                     val req =
                       GradientRequest(
                           sample until Math.min(sample + batch, i * piece + piece),
                           0.1,
                           0,
                           weights.map.mapValues(_.toDouble))
+                    log.debug(req.toString)
                     worker.gradient(req).map { res =>
+                      log.debug("Got res from worker") //TODO remove
                       require(!res.grad.values.exists(_.isNaN), "NaN detected")
                       res
                     }
@@ -93,13 +104,14 @@ class Master(node: Node, data: Data) {
                 Future
                   .sequence(work)
                   .map { res =>
+                    assert(false, "TEST FALSE ASSERTION") //TODO remove this
                     val grad        = res.map(grad => Vec(grad.grad, weights.size)).fold(Vec.zeros(weights.size))(_ + _)
                     val durations   = res.map(x => x.terminatedAt - x.startedAt)
                     val durationMax = durations.max / 1000.0
                     val durationMin = durations.min / 1000.0
                     val durationAvg = durations.sum / 1000.0 / durations.size
                     val sparsity    = if (grad.nonZeroCount() > 0) 100 else 100 - 100 * grad.nonZeroCount().toDouble / dims
-                    log.trace(
+                    log.debug(
                         f"$epoch.$step duration $sparsity%.2f ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
                     weights + grad
                   }
@@ -107,11 +119,10 @@ class Master(node: Node, data: Data) {
         }
 
     }
+    log.debug("Work done, waiting result")
 
-    result.map { res =>
-      log.info(s"dsgd end")
-      res
-    }
+    result.foreach(_ => log.info(s"dsgd end"))
+    result
   }
 
 }

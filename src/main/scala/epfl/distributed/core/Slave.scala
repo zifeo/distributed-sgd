@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
 import epfl.distributed.core.ml.SparseSVM
-import epfl.distributed.math.Sparse
+import epfl.distributed.math.SparseArrayVector
 import epfl.distributed.utils.Pool
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -18,7 +18,7 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
 
     def forward(request: ForwardRequest): Future[ForwardReply] = Future {
       val ForwardRequest(samplesIdx, weights) = request
-      val w                                   = Sparse(weights, data.head._1.size)
+      val w                                   = SparseArrayVector(weights, data.head._1.size)
 
       val preds = samplesIdx.map { idx =>
         val (x, y) = data(idx)
@@ -31,7 +31,7 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
       val receivedAt                                         = System.currentTimeMillis()
       val GradientRequest(samplesIdx, step, lambda, weights) = request
-      val w                                                  = Sparse(weights, data.head._1.size)
+      val w                                                  = SparseArrayVector(weights, data.head._1.size)
 
       val grad = samplesIdx
         .map { idx =>
@@ -39,9 +39,11 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
           model.backward(w, x, y)
         }
         .reduce(_ + _)
+      val gradResp = (grad * -step).map.mapValues(_.toDouble)
+      require(!gradResp.values.exists(_.isNaN), "NaN detected in grad response")
 
       val terminatedAt = System.currentTimeMillis()
-      GradientReply((grad * -step).map.mapValues(_.toDouble), receivedAt, terminatedAt)
+      GradientReply(gradResp, receivedAt, terminatedAt)
     }
 
   }
