@@ -65,14 +65,14 @@ object Vec {
   def apply(numbers: Iterable[Number]): Dense = Dense(numbers.toVector)
 
   def apply(size: Int, values: (Int, Number)*): Sparse   = Sparse(values.toMap, size)
-  def apply(size: Int, values: Map[Int, Number]): Sparse = Sparse(values, size)
+  def apply(values: Map[Int, Number], size: Int): Sparse = Sparse(values, size)
 
   def apply[A: Numeric](m: Map[Int, A], size: Int): Sparse = {
     val num = implicitly[Numeric[A]]
     Sparse(m.mapValues(num.toNumber), size)
   }
 
-  def zeros(size: Int): Vec                               = SparseArrayVector.zeros(size)
+  def zeros(size: Int): Vec                               = Sparse.zeros(size)
   def ones(size: Int): Vec                                = Dense.ones(size)
   def fill(value: Number, size: Int): Dense               = Dense.fill(value, size)
   def oneHot(value: Number, index: Int, size: Int): Dense = Dense.oneHot(value, index, size)

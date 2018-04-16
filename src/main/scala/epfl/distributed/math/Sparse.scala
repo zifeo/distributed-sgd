@@ -21,7 +21,7 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
   override def mapValues(op: Number => Number): Vec = {
     val zeroTransformed = op(Number.zero)
 
-    if (zeroTransformed == Number.zero) {
+    if (zeroTransformed === Number.zero) {
       //Default value stays zero
       Sparse(map.mapValues(op), size)
     }

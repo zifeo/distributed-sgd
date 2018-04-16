@@ -1,12 +1,15 @@
 package epfl.distributed
 
+import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.core.Node
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.core.{Master, Slave}
-import epfl.distributed.math.{SparseArrayVector, Vec}
+import epfl.distributed.math.Vec
 import epfl.distributed.utils.{Dataset, Pool}
 
 object Main extends App {
+
+  private val log = Logger(s"Main")
 
   import Pool.AwaitableFuture
 
@@ -14,7 +17,7 @@ object Main extends App {
   val featuresCount = 47236
 
   val data: Data = Dataset.rcv1(500).map {
-    case (x, y) => SparseArrayVector(x, featuresCount) -> y
+    case (x, y) => Vec(x, featuresCount) -> y
   }
 
   val svm = new SparseSVM(0)
@@ -30,8 +33,12 @@ object Main extends App {
 
   var w = w0
   for (i <- 0 to 4) {
-    val w1   = master.backward(epochs = 1, weights = w).await
+    log.debug("Backward phase starting")
+    val w1 = master.backward(epochs = 1, weights = w).await
+
+    log.debug("Forward phase starting")
     val res1 = master.forward(w1).await
+
     println(res1.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
     w = w1
   }
