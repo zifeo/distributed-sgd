@@ -79,7 +79,7 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
   def mapValues(op: Number => Number): SparseArrayVector = {
 
     val result = this.sparseVec._2.map(data => op(data))
-
+    //TODO Go through the zero filter
     SparseArrayVector((this.sparseVec._1, result), this.size)
   }
 
