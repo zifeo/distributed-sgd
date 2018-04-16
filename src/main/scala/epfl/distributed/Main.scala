@@ -1,17 +1,14 @@
 package epfl.distributed
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.core.Node
-import epfl.distributed.core.ml.SparseSVM
-import epfl.distributed.core.{Master, Slave}
+import epfl.distributed.core.Master
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.{Dataset, Pool}
 
 object Main extends App {
-
-  private val log = Logger(s"Main")
-
   import Pool.AwaitableFuture
+
+  private val log = Logger("Main")
 
   type Data = Array[(Vec, Int)]
   val featuresCount = 47236
@@ -20,12 +17,7 @@ object Main extends App {
     case (x, y) => Vec(x, featuresCount) -> y
   }
 
-  val svm = new SparseSVM(0)
-
-  // create nodes
-  val masterNode :: slaveNodes = (0 to 3).map(p => Node("127.0.0.1", 4000 + p)).toList
-  val master                   = new Master(masterNode, data)
-  val slaves                   = slaveNodes.map(sn => new Slave(sn, masterNode, data, svm))
+  val master = new Master(data)
 
   val w0   = Vec.zeros(featuresCount)
   val res0 = master.forward(w0).await

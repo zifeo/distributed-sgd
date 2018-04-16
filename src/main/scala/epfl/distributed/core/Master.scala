@@ -5,14 +5,21 @@ import java.util.concurrent.ConcurrentHashMap
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
+import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
-import epfl.distributed.utils.Pool
+import epfl.distributed.utils.{Config, Pool}
 import io.grpc.ManagedChannel
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-class Master(node: Node, data: Data) {
+class Master(data: Data) {
+
+  val config = pureconfig.loadConfigOrThrow[Config]
+
+  private val svm = new SparseSVM(0)
+
+  private val node = Node("127.0.0.1", config.masterPort)
 
   private val log                   = Logger(s"master-${pretty(node)}")
   private val slaves                = new ConcurrentHashMap[Node, ManagedChannel]()
@@ -34,13 +41,16 @@ class Master(node: Node, data: Data) {
       slaves.remove(node)
       Future.successful(Ack())
     }
-
   }
 
   val server = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
   server.start()
 
   log.info("ready")
+
+  config.slaves.addresses.zip(config.slaves.ports).foreach {
+    case (address, port) => new Slave(Node(address, port), node, data, svm)
+  }
 
   def forward(weights: Vec): Future[Array[Double]] = {
     val workers = slaves.values().asScala.map(SlaveGrpc.stub) //TODO extract this outside the method
@@ -50,7 +60,7 @@ class Master(node: Node, data: Data) {
       case (worker, i) =>
         val sample = i * piece
         //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in forward weights")
-        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
+        val req = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
         worker.forward(req)
     }
 
@@ -61,11 +71,11 @@ class Master(node: Node, data: Data) {
     log.info(s"dsgd start")
     //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in initial weights")
 
-    val init    = Future.successful(weights)
-    val workers = slaves.values().asScala.map(SlaveGrpc.stub)
+    val init             = Future.successful(weights)
+    val workers          = slaves.values().asScala.map(SlaveGrpc.stub)
     val workersWithIndex = workers.zipWithIndex
-    val piece   = Math.floorDiv(data.length, workers.size)
-    val dims    = data.map(_._1.nonZeroCount()).max
+    val piece            = Math.floorDiv(data.length, workers.size)
+    val dims             = data.map(_._1.nonZeroCount()).max
 
     log.info(s"dims $dims")
 
@@ -76,7 +86,6 @@ class Master(node: Node, data: Data) {
         (0 until piece by batch).foldLeft(weightsEpoch) {
           case (weightStep, step) =>
             log.debug(s"step ${step + 1} / $piece")
-
 
             weightStep
               .flatMap { weights =>
