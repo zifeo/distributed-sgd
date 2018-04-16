@@ -53,6 +53,8 @@ trait Vec {
     case _: Sparse => Sparse.zeros(this.size)
   }
 
+  def sparsity(epsilon: Number = 1e-20): Double = 1 - nonZeroCount(epsilon).toDouble / size
+
   def nonZeroCount(epsilon: Number = 1e-20): Int
   //def nonZeroCount: Int = nonZeroCount()
 

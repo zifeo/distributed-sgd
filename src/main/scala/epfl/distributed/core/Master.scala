@@ -15,13 +15,13 @@ class Master(data: Data) {
 
   val config = pureconfig.loadConfigOrThrow[Config]
 
-  private val svm = new SparseSVM(0.01)
+  private val svm = new SparseSVM(0)
 
   private val node = Node("127.0.0.1", config.masterPort)
 
   private val log = Logger(s"master-${pretty(node)}")
 
-  private val slaves                = TrieMap[Node, ManagedChannel]()
+  private val slaves = TrieMap[Node, ManagedChannel]()
 
   implicit val ec: ExecutionContext = Pool.newFixedExecutor()
 
@@ -74,11 +74,8 @@ class Master(data: Data) {
     val init             = Future.successful(weights)
     val workersWithIndex = slaves.values.map(SlaveGrpc.stub).zipWithIndex
     val piece            = Math.floorDiv(data.length, workersWithIndex.size)
-    val dims             = data.map(_._1.nonZeroCount()).max
 
-    log.info(s"dims $dims")
-
-    val result = (0 until epochs).foldLeft(init) {
+    val result = (1 to epochs).foldLeft(init) {
       case (weightsEpoch, epoch) =>
         log.info(s"epoch $epoch")
 
@@ -112,9 +109,9 @@ class Master(data: Data) {
                     val durationMax = durations.max / 1000.0
                     val durationMin = durations.min / 1000.0
                     val durationAvg = durations.sum / 1000.0 / durations.size
-                    val sparsity    = if (grad.nonZeroCount() > 0) 100 else 100 - 100 * grad.nonZeroCount().toDouble / dims
+                    val sparsity    = 100 * grad.sparsity()
                     log.debug(
-                        f"$epoch.$step duration $sparsity%.2f ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
+                        f"$epoch:$step sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
                     weights + grad
                   }
               }

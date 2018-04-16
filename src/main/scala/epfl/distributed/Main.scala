@@ -10,7 +10,7 @@ object Main extends App {
   type Data = Array[(Vec, Int)]
   val featuresCount = 47236
 
-  val data: Data = Dataset.rcv1(3000).map {
+  val data: Data = Dataset.rcv1().map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
 
