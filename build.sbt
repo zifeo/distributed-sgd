@@ -66,7 +66,8 @@ libraryDependencies ++= List(
     "com.typesafe.scala-logging" %% "scala-logging"        % "3.9.0",
     "com.nrinaudo"               %% "kantan.csv"           % "0.4.0",
     "com.github.pathikrit"       %% "better-files"         % "3.4.0",
-    "org.scalatest"              %% "scalatest"            % "3.0.5" % "test"
+    "org.scalatest"              %% "scalatest"            % "3.0.5" % "test",
+    "com.storm-enroute"          %% "scalameter"           % "0.9" % "test"
 )
 
 PB.targets in Compile := Seq(
