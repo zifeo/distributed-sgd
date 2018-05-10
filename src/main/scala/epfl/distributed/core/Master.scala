@@ -1,22 +1,20 @@
 package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
-import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
-import epfl.distributed.utils.{Config, Pool}
+import epfl.distributed.utils.Pool
 import io.grpc.ManagedChannel
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.{ExecutionContextExecutorService, Future}
 
-class Master(node: Node, data: Data, async: Boolean) {
+class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
 
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
-  private val log = Logger(s"master-${pretty(node)}")
-  private val slaves = TrieMap[Node, ManagedChannel]()
-  private val server = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
+  private val log                                  = Logger(s"master-${pretty(node)}")
+  private val slaves                               = TrieMap[Node, ManagedChannel]()
+  private val server                               = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
 
   def start(): Unit = {
     require(!ec.isShutdown)

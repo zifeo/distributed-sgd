@@ -1,6 +1,7 @@
 package epfl.distributed.utils
 
 import better.files.File
+import epfl.distributed.Main
 import kantan.codecs.resource.ResourceIterator
 import kantan.csv._
 import kantan.csv.ops._
@@ -8,10 +9,8 @@ import spire.math.Number
 
 object Dataset {
 
-  val folder = "data"
-
   // CCAT transform to -1 or 1
-  def rcv1(entries: Option[Int] = None): Array[(Map[Int, Number], Int)] = {
+  def rcv1(folder: String, entries: Option[Int] = None): Array[(Map[Int, Number], Int)] = {
     // not that safe
 
     val dataFiles   = (0 to 3).map(d => s"lyrl2004_vectors_test_pt$d.dat") :+ "lyrl2004_vectors_train.dat"
@@ -19,6 +18,7 @@ object Dataset {
 
     def dataReader(filename: String): CsvReader[ReadResult[Vector[String]]] = {
       val url = File(s"$folder/$filename").url
+      println(url)
       url.asCsvReader[Vector[String]](rfc.withCellSeparator(' '))
     }
 
@@ -58,5 +58,4 @@ object Dataset {
     entries.fold(data.toArray)(data.take(_).toArray)
   }
 
-  def rcv1(entries: Int): Array[(Map[Int, Number], Int)] = rcv1(Some(entries))
 }

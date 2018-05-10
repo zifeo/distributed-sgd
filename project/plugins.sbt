@@ -10,8 +10,6 @@ addSbtPlugin("io.get-coursier" % "sbt-coursier" % "1.0.2")
 
 addSbtPlugin("com.timushev.sbt" % "sbt-updates" % "0.3.4")
 
-addSbtPlugin("au.com.onegeek" %% "sbt-dotenv" % "1.2.88")
-
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.18")
 
 libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.7.4"

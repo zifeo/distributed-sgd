@@ -48,11 +48,12 @@ scalacOptions ++= List(
     //"-Ywarn-unused-import"
     //"-Ywarn-value-discard"
 )
-
-scalacOptions in Test --= Seq("-Ywarn-value-discard", "-Ywarn-unused:privates")
+scalacOptions in Test --= List(
+    "-Ywarn-value-discard",
+    "-Ywarn-unused:privates"
+)
 
 resolvers += Resolver.sonatypeRepo("releases")
-
 libraryDependencies ++= List(
     "ch.qos.logback"             % "logback-classic"       % "1.2.3",
     "org.apache.logging.log4j"   % "log4j-to-slf4j"        % "2.11.0",
@@ -83,15 +84,10 @@ testOptions in Test += Tests.Argument("-oD")
 
 test in assembly := {}
 target in assembly := file("build")
-assemblyJarName in assembly := "distributed-sgd.jar"
+assemblyJarName in assembly := "dsgd.jar"
 mainClass in assembly := Some("epfl.distributed.Main")
-packageOptions := List(
-    ManifestAttributes(
-        "Change"     -> version.value,
-        "Build-Date" -> LocalDateTime.now.format(DateTimeFormatter.ISO_DATE_TIME)
-    )
-)
 assemblyMergeStrategy in assembly := {
-  case PathList("META-INF", "log4j-provider.properties") => MergeStrategy.first
-  case x                                                 => (assemblyMergeStrategy in assembly).value(x)
+  case PathList("META-INF", "log4j-provider.properties")    => MergeStrategy.first
+  case PathList("META-INF", "io.netty.versions.properties") => MergeStrategy.first
+  case x                                                    => (assemblyMergeStrategy in assembly).value(x)
 }

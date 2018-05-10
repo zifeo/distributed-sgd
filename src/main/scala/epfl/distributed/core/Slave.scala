@@ -1,20 +1,19 @@
 package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.Main.Data
 import epfl.distributed.core.core._
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.{ExecutionContextExecutorService, Future}
 
-class Slave(node: Node, master: Node, data: Data, model: SparseSVM, async: Boolean) {
+class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean) {
 
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
-  private val log                           = Logger(s"slave--${pretty(node)}")
-  private val server = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
-  private val masterChannel = newChannel(master.host, master.port)
+  private val log                                  = Logger(s"slave--${pretty(node)}")
+  private val server                               = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
+  private val masterChannel                        = newChannel(master.host, master.port)
 
   def start(): Unit = {
     require(!ec.isShutdown)

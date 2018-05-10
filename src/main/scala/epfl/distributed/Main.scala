@@ -34,12 +34,11 @@ object Main extends App {
     Kamon.addReporter(new InfluxDBReporter())
   }
 
-  type Data = Array[(Vec, Int)]
   val featuresCount = 47236
-
-  val data: Data = Dataset.rcv1(100).map {
+  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, Some(100)).map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
+  println(data.toList)
 
   (config.masterHost, config.masterPort) match {
 
@@ -53,14 +52,14 @@ object Main extends App {
       log.info("slave")
 
       val masterNode = Node(masterHost, masterPort)
-      val slave = new Slave(node, masterNode, data, model, async)
+      val slave      = new Slave(node, masterNode, data, model, async)
       slave.start()
 
     case _ =>
       log.info("dev mode")
       val masterNode :: slaveNodes = (0 to 4).toList.map(i => Node(config.host, config.port + i))
-      val master = new Master(masterNode, data, async)
-      val slaves = slaveNodes.map(n => new Slave(n, masterNode, data, model, async))
+      val master                   = new Master(masterNode, data, async)
+      val slaves                   = slaveNodes.map(n => new Slave(n, masterNode, data, model, async))
 
       master.start()
       slaves.foreach(_.start())
