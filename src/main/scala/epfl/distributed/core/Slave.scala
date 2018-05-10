@@ -38,6 +38,11 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     log.info("stopped")
   }
 
+  def awaitTermination(): Unit = {
+    log.info("waiting")
+    server.awaitTermination()
+  }
+
   class SlaveImpl extends SlaveGrpc.Slave {
 
     def forward(request: ForwardRequest): Future[ForwardReply] = Future {

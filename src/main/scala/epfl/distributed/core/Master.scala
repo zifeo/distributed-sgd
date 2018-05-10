@@ -33,6 +33,11 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     log.info("stopped")
   }
 
+  def awaitTermination(): Unit = {
+    log.info("waiting")
+    server.awaitTermination()
+  }
+
   def onSlaveJoin(callback: Int => Unit): Unit = {
     slaveJoinCallbacks += callback
   }

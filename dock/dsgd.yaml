@@ -37,23 +37,23 @@ spec:
       - name: dsgd-master
         image: zifeo/dsgd:node
         imagePullPolicy: Always
-      env:
-      - name: DSGD_NODE_HOST
-        valueFrom:
-          fieldRef:
-            fieldPath: status.podIP
-      - name: DSGD_NODE_PORT
-        value: 4000
-      - name: DSGD_MASTER_HOST
-        valueFrom:
-          fieldRef:
-            fieldPath: status.podIP
-      - name: DSGD_MASTER_PORT
-        value: 4000
-      - name: DSGD_ASYNC
-        value: false
-      - name: DSGD_RECORD
-        value: false
+        env:
+        - name: DSGD_NODE_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: DSGD_NODE_PORT
+          value: "4000"
+        - name: DSGD_MASTER_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: DSGD_MASTER_PORT
+          value: "4000"
+        - name: DSGD_ASYNC
+          value: "false"
+        - name: DSGD_RECORD
+          value: "false"
       restartPolicy: Always
       imagePullSecrets:
         - name: hub-private
@@ -86,15 +86,15 @@ spec:
             fieldRef:
               fieldPath: status.podIP
         - name: DSGD_NODE_PORT
-          value: 4000
+          value: "4000"
         - name: DSGD_MASTER_HOST
-          value: dsgd-master
+          value: "dsgd-master"
         - name: DSGD_MASTER_PORT
-          value: 4000
+          value: "4000"
         - name: DSGD_ASYNC
-          value: false
+          value: "false"
         - name: DSGD_RECORD
-          value: false
+          value: "false"
         imagePullPolicy: Always
       restartPolicy: Always
       imagePullSecrets:

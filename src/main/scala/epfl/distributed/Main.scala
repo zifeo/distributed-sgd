@@ -72,6 +72,8 @@ object Main extends App {
         }
       }
 
+      master.awaitTermination()
+
     case (Some(masterHost), Some(masterPort)) =>
       log.info("slave")
 
@@ -82,6 +84,8 @@ object Main extends App {
       sys.addShutdownHook {
         slave.stop()
       }
+
+      slave.awaitTermination()
 
     case _ =>
       log.info("dev mode")

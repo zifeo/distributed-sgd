@@ -1,7 +1,7 @@
 FROM frolvlad/alpine-oraclejdk8:slim
 
-ADD build/dsgd.jar /opt/
 ADD data /data
+ADD build/dsgd.jar /opt/
 
 RUN echo "Europe/Zurich" > /etc/timezone
 
