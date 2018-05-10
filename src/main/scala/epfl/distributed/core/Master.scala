@@ -42,6 +42,89 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     slaveJoinCallbacks += callback
   }
 
+  def forward(weights: Vec): Future[Array[Double]] = {
+    val workers = slaves.values.map(SlaveGrpc.stub)
+    val piece   = Math.floorDiv(data.length, workers.size)
+
+    val work = workers.zipWithIndex.map {
+      case (worker, i) =>
+        val sample = i * piece
+        //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in forward weights")
+        val req = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
+        worker.forward(req)
+    }
+
+    Future.sequence(work).map(_.flatMap(_.predictions).toArray)
+  }
+
+  def backward(epochs: Int, batchSize: Int = 1, weights: Vec): Future[Vec] = {
+
+    def loop[T](on: Seq[T])(init: Vec)(apply: (Vec, T) => Future[Vec]): Future[Vec] =
+      on.foldLeft(Future.successful(init)) {
+        case (itWeights, it) =>
+          itWeights.flatMap(w => apply(w, it))
+      }
+
+    /*
+      Need to improve:
+      - data idx attributions per node
+      - randomness of idx between epochs
+      - cleaner encoding/decoding between vec implement and grpc message data
+      - stepsize
+
+      How can this fit into the async mode?
+     */
+
+    log.info(s"dsgd start")
+    //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in initial weights")
+
+    val init             = weights
+    val workersWithIndex = slaves.values.map(SlaveGrpc.stub).zipWithIndex
+    val piece            = Math.floorDiv(data.length, workersWithIndex.size)
+
+    val result = loop(1 to epochs)(init) { // epoch
+      case (epochWeight, epoch) =>
+        log.info(s"epoch $epoch")
+
+        loop(0 until piece by batchSize)(epochWeight) { // batch
+          case (batchWeights, batch) =>
+            log.debug(s"step ${batch + 1} / $piece")
+
+            val work = workersWithIndex.map {
+              case (worker, i) =>
+                val sample = i * piece + batch
+
+                //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in values")
+                val req =
+                  GradientRequest(
+                      sample until Math.min(sample + batchSize, i * piece + piece),
+                      0.1,
+                      0,
+                      batchWeights.map.mapValues(_.toDouble))
+                worker.gradient(req)
+            }
+            Future
+              .sequence(work)
+              .map { res =>
+                val grad        = Vec.mean(res.map(grad => Vec(grad.grad, batchWeights.size)))
+                val durations   = res.map(x => x.terminatedAt - x.startedAt)
+                val durationMax = durations.max / 1000.0
+                val durationMin = durations.min / 1000.0
+                val durationAvg = durations.sum / 1000.0 / durations.size
+                val sparsity    = 100 * grad.sparsity()
+                log.trace(
+                    f"$epoch:$batch sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
+                batchWeights + grad
+              }
+        }
+
+    }
+    log.debug("Work done, waiting result")
+
+    result.foreach(_ => log.info(s"dsgd end"))
+    result
+  }
+
   class MasterImpl extends MasterGrpc.Master {
 
     def registerSlave(node: Node): Future[Ack] = {
@@ -61,77 +144,4 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
       Future.successful(Ack())
     }
   }
-
-  def forward(weights: Vec): Future[Array[Double]] = {
-    val workers = slaves.values.map(SlaveGrpc.stub)
-    val piece   = Math.floorDiv(data.length, workers.size)
-
-    val work = workers.zipWithIndex.map {
-      case (worker, i) =>
-        val sample = i * piece
-        //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in forward weights")
-        val req = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
-        worker.forward(req)
-    }
-
-    Future.sequence(work).map(_.flatMap(_.predictions).toArray)
-  }
-
-  def backward(epochs: Int, batch: Int = 1, weights: Vec): Future[Vec] = {
-    log.info(s"dsgd start")
-    //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in initial weights")
-
-    val init             = Future.successful(weights)
-    val workersWithIndex = slaves.values.map(SlaveGrpc.stub).zipWithIndex
-    val piece            = Math.floorDiv(data.length, workersWithIndex.size)
-
-    val result = (1 to epochs).foldLeft(init) {
-      case (weightsEpoch, epoch) =>
-        log.info(s"epoch $epoch")
-
-        (0 until piece by batch).foldLeft(weightsEpoch) {
-          case (weightStep, step) =>
-            log.debug(s"step ${step + 1} / $piece")
-
-            weightStep
-              .flatMap { weights =>
-                val work = workersWithIndex.map {
-                  case (worker, i) =>
-                    val sample = i * piece + step
-
-                    //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in values")
-                    val req =
-                      GradientRequest(
-                          sample until Math.min(sample + batch, i * piece + piece),
-                          0.1,
-                          0,
-                          weights.map.mapValues(_.toDouble))
-                    worker.gradient(req).map { res =>
-                      require(!res.grad.values.exists(_.isNaN), "NaN detected")
-                      res
-                    }
-                }
-                Future
-                  .sequence(work)
-                  .map { res =>
-                    val grad        = res.map(grad => Vec(grad.grad, weights.size)).fold(Vec.zeros(weights.size))(_ + _)
-                    val durations   = res.map(x => x.terminatedAt - x.startedAt)
-                    val durationMax = durations.max / 1000.0
-                    val durationMin = durations.min / 1000.0
-                    val durationAvg = durations.sum / 1000.0 / durations.size
-                    val sparsity    = 100 * grad.sparsity()
-                    log.trace(
-                        f"$epoch:$step sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
-                    weights + grad
-                  }
-              }
-        }
-
-    }
-    log.debug("Work done, waiting result")
-
-    result.foreach(_ => log.info(s"dsgd end"))
-    result
-  }
-
 }

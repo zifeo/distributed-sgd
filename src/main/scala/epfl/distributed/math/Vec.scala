@@ -79,6 +79,14 @@ object Vec {
   def fill(value: Number, size: Int): Dense               = Dense.fill(value, size)
   def oneHot(value: Number, index: Int, size: Int): Dense = Dense.oneHot(value, index, size)
 
+  def sum(vecs: Iterable[Vec]): Vec = {
+    require(vecs.nonEmpty)
+    val fst :: others = vecs
+    require(others.forall(_.size == fst.size))
+    others.foldLeft(fst)(_ + _)
+  }
+  def mean(vecs: Iterable[Vec]): Vec = sum(vecs) / vecs.size
+
   def randU[N <: Number: Uniform](size: Int, min: N, max: N): Dense                = Dense.randU(size, min, max)
   def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d): Dense = Dense.randG(size, mean, stdDev)
   def randE[N <: Number: Exponential](size: Int, rate: N): Dense                   = Dense.randE(size, rate)
