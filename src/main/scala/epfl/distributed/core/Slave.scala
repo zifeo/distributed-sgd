@@ -7,12 +7,37 @@ import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
-class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
+class Slave(node: Node, master: Node, data: Data, model: SparseSVM, async: Boolean) {
 
-  val log                           = Logger(s"slave--${pretty(node)}")
-  implicit val ec: ExecutionContext = Pool.newFixedExecutor()
+  implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
+  private val log                           = Logger(s"slave--${pretty(node)}")
+  private val server = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
+  private val masterChannel = newChannel(master.host, master.port)
+
+  def start(): Unit = {
+    require(!ec.isShutdown)
+    server.start()
+    log.info("started")
+
+    // register slave node
+    val masterStub = MasterGrpc.blockingStub(masterChannel)
+    masterStub.registerSlave(node)
+    log.info("registered")
+  }
+
+  def stop(): Unit = {
+    // register slave node
+    val masterStub = MasterGrpc.blockingStub(masterChannel)
+    masterStub.unregisterSlave(node)
+    log.info("unregistered")
+
+    server.shutdown()
+    server.awaitTermination()
+    ec.shutdown()
+    log.info("stopped")
+  }
 
   class SlaveImpl extends SlaveGrpc.Slave {
 
@@ -47,15 +72,5 @@ class Slave(node: Node, master: Node, data: Data, model: SparseSVM) {
     }
 
   }
-
-  val server = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
-  server.start()
-
-  // register slave node
-  val masterChannel = newChannel(master.ip, master.port)
-  val masterStub    = MasterGrpc.blockingStub(masterChannel)
-  masterStub.registerSlave(node)
-
-  log.info("ready and registered")
 
 }

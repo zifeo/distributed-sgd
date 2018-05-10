@@ -1,34 +1,89 @@
 package epfl.distributed
 
-import epfl.distributed.core.Master
+import java.util.logging.LogManager
+
+import com.typesafe.scalalogging.Logger
+import epfl.distributed.core.core.Node
+import epfl.distributed.core.ml.SparseSVM
+import epfl.distributed.core.{Master, Slave}
 import epfl.distributed.math.Vec
-import epfl.distributed.utils.{Dataset, Pool}
+import epfl.distributed.utils.{Config, Dataset, Pool}
+import kamon.Kamon
+import kamon.influxdb.InfluxDBReporter
 
 object Main extends App {
-  import Pool.AwaitableFuture
+
+  // init logback
+  LogManager.getLogManager.readConfiguration()
+  val log = Logger(s"bootstrap")
+
+  val config = pureconfig.loadConfigOrThrow[Config]("dsgd")
+  log.info("{}", config)
+
+  val node = Node(config.host, config.port)
+  log.info("{}", node)
+
+  val async = config.async // TODO : refactor into a strategy either sync or async
+  log.info(if (config.async) "async" else "sync")
+
+  // could use another model
+  val model = new SparseSVM(0)
+
+  if (config.record) {
+    log.info("recording")
+    Kamon.addReporter(new InfluxDBReporter())
+  }
 
   type Data = Array[(Vec, Int)]
   val featuresCount = 47236
 
-  val data: Data = Dataset.rcv1().map {
+  val data: Data = Dataset.rcv1(100).map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
 
-  val master = new Master(data)
+  (config.masterHost, config.masterPort) match {
 
-  val epochs = 5
+    case (Some(masterHost), Some(masterPort)) if masterHost == node.host && masterPort == node.port =>
+      log.info("master")
 
-  val w0   = Vec.zeros(featuresCount)
-  val res0 = master.forward(w0).await
-  println("Initial loss: " + res0.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
+      val master = new Master(node, data, async)
+      master.start()
 
-  val w1   = master.backward(epochs = epochs, weights = w0).await
-  val res1 = master.forward(w1).await
+    case (Some(masterHost), Some(masterPort)) =>
+      log.info("slave")
 
-  println(
-      s"End loss after $epochs epochs: " + res1
-        .zip(data)
-        .map { case (p, (_, y)) => Math.pow(p - y, 2) }
-        .sum / data.length)
+      val masterNode = Node(masterHost, masterPort)
+      val slave = new Slave(node, masterNode, data, model, async)
+      slave.start()
+
+    case _ =>
+      log.info("dev mode")
+      val masterNode :: slaveNodes = (0 to 4).toList.map(i => Node(config.host, config.port + i))
+      val master = new Master(masterNode, data, async)
+      val slaves = slaveNodes.map(n => new Slave(n, masterNode, data, model, async))
+
+      master.start()
+      slaves.foreach(_.start())
+
+      import Pool.AwaitableFuture
+      val epochs = 5
+
+      val w0   = Vec.zeros(featuresCount)
+      val res0 = master.forward(w0).await
+      println("Initial loss: " + res0.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
+
+      val w1   = master.backward(epochs = epochs, weights = w0).await
+      val res1 = master.forward(w1).await
+
+      println(
+          s"End loss after $epochs epochs: " + res1
+            .zip(data)
+            .map { case (p, (_, y)) => Math.pow(p - y, 2) }
+            .sum / data.length)
+
+      slaves.foreach(_.stop())
+      master.stop()
+
+  }
 
 }

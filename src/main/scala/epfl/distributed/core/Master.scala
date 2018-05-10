@@ -9,28 +9,34 @@ import epfl.distributed.utils.{Config, Pool}
 import io.grpc.ManagedChannel
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 
-class Master(data: Data) {
+class Master(node: Node, data: Data, async: Boolean) {
 
-  val config = pureconfig.loadConfigOrThrow[Config]
-
-  private val svm = new SparseSVM(0)
-
-  private val node = Node("127.0.0.1", config.masterPort)
-
+  implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
   private val log = Logger(s"master-${pretty(node)}")
-
   private val slaves = TrieMap[Node, ManagedChannel]()
+  private val server = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
 
-  implicit val ec: ExecutionContext = Pool.newFixedExecutor()
+  def start(): Unit = {
+    require(!ec.isShutdown)
+    server.start()
+    log.info("started")
+  }
+
+  def stop(): Unit = {
+    server.shutdown()
+    server.awaitTermination()
+    ec.shutdown()
+    log.info("stopped")
+  }
 
   class MasterImpl extends MasterGrpc.Master {
 
     def registerSlave(node: Node): Future[Ack] = {
       log.info(s"new slave ${pretty(node)}")
 
-      val channel = newChannel(node.ip, node.port)
+      val channel = newChannel(node.host, node.port)
       slaves.put(node, channel)
       Future.successful(Ack())
     }
@@ -41,15 +47,6 @@ class Master(data: Data) {
       slaves.remove(node)
       Future.successful(Ack())
     }
-  }
-
-  val server = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
-  server.start()
-
-  log.info("ready")
-
-  val slaveNodes = config.slaves.addresses.zip(config.slaves.ports).foreach {
-    case (address, port) => new Slave(Node(address, port), node, data, svm)
   }
 
   def forward(weights: Vec): Future[Array[Double]] = {

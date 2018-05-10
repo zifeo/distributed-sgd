@@ -9,7 +9,7 @@ service Master {
 }
 
 message Node {
-    string ip = 1;
+    string host = 1;
     int32 port = 2;
 }
 
@@ -23,7 +23,7 @@ service Slave {
 
 message ForwardRequest {
     repeated int32 samples = 1 [packed=true];
-    map<int32, double> weights = 4;
+    map<int32, double> weights = 2;
 }
 
 message ForwardReply {
