@@ -7,6 +7,7 @@ import epfl.distributed.utils.Pool
 import io.grpc.ManagedChannel
 
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContextExecutorService, Future}
 
 class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
@@ -15,6 +16,9 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
   private val log                                  = Logger(s"master-${pretty(node)}")
   private val slaves                               = TrieMap[Node, ManagedChannel]()
   private val server                               = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
+
+  // need to change this
+  private val slaveJoinCallbacks = mutable.ListBuffer.empty[Int => Unit]
 
   def start(): Unit = {
     require(!ec.isShutdown)
@@ -29,6 +33,10 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     log.info("stopped")
   }
 
+  def onSlaveJoin(callback: Int => Unit): Unit = {
+    slaveJoinCallbacks += callback
+  }
+
   class MasterImpl extends MasterGrpc.Master {
 
     def registerSlave(node: Node): Future[Ack] = {
@@ -36,7 +44,9 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
 
       val channel = newChannel(node.host, node.port)
       slaves.put(node, channel)
-      Future.successful(Ack())
+      val ack = Future.successful(Ack())
+      ack.onComplete(_ => slaveJoinCallbacks.foreach(_(slaves.size)))
+      ack
     }
 
     def unregisterSlave(node: Node): Future[Ack] = {

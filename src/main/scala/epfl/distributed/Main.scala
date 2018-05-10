@@ -20,6 +20,7 @@ object Main extends App {
   val config = pureconfig.loadConfigOrThrow[Config]("dsgd")
   log.info("{}", config)
 
+  // current node (see application.conf, can be set using env vars)
   val node = Node(config.host, config.port)
   log.info("{}", node)
 
@@ -38,7 +39,6 @@ object Main extends App {
   val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, Some(100)).map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
-  println(data.toList)
 
   (config.masterHost, config.masterPort) match {
 
@@ -48,6 +48,30 @@ object Main extends App {
       val master = new Master(node, data, async)
       master.start()
 
+      sys.addShutdownHook {
+        master.stop()
+      }
+
+      master.onSlaveJoin { (slaveCount: Int) =>
+        if (slaveCount == 3) {
+          import Pool.AwaitableFuture
+          val epochs = 5
+
+          val w0 = Vec.zeros(featuresCount)
+          val res0 = master.forward(w0).await
+          println("Initial loss: " + res0.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
+
+          val w1 = master.backward(epochs = epochs, weights = w0).await
+          val res1 = master.forward(w1).await
+
+          println(
+            s"End loss after $epochs epochs: " + res1
+              .zip(data)
+              .map { case (p, (_, y)) => Math.pow(p - y, 2) }
+              .sum / data.length)
+        }
+      }
+
     case (Some(masterHost), Some(masterPort)) =>
       log.info("slave")
 
@@ -55,8 +79,13 @@ object Main extends App {
       val slave      = new Slave(node, masterNode, data, model, async)
       slave.start()
 
+      sys.addShutdownHook {
+        slave.stop()
+      }
+
     case _ =>
       log.info("dev mode")
+
       val masterNode :: slaveNodes = (0 to 4).toList.map(i => Node(config.host, config.port + i))
       val master                   = new Master(masterNode, data, async)
       val slaves                   = slaveNodes.map(n => new Slave(n, masterNode, data, model, async))

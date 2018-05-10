@@ -1,0 +1,101 @@
+kind: Service
+apiVersion: v1
+
+metadata:
+  name: dsgd-master
+
+spec:
+  clusterIP: None
+  selector:
+    app: dsgd-master
+
+  ports:
+  - protocol: TCP
+    port: 4000
+    targetPort: 4000
+
+---
+
+kind: Deployment
+apiVersion: apps/v1
+
+metadata:
+  name: dsgd-master
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dsgd-master
+
+  template:
+    metadata:
+      labels:
+        app: dsgd-master
+    spec:
+      containers:
+      - name: dsgd-master
+        image: zifeo/dsgd:node
+        imagePullPolicy: Always
+      env:
+      - name: DSGD_NODE_HOST
+        valueFrom:
+          fieldRef:
+            fieldPath: status.podIP
+      - name: DSGD_NODE_PORT
+        value: 4000
+      - name: DSGD_MASTER_HOST
+        valueFrom:
+          fieldRef:
+            fieldPath: status.podIP
+      - name: DSGD_MASTER_PORT
+        value: 4000
+      - name: DSGD_ASYNC
+        value: false
+      - name: DSGD_RECORD
+        value: false
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: hub-private
+
+---
+
+kind: Deployment
+apiVersion: apps/v1
+
+metadata:
+  name: dsgd-slave
+
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dsgd-slave
+
+  template:
+    metadata:
+      labels:
+        app: dsgd-slave
+    spec:
+      containers:
+      - name: dsgd-slave
+        image: zifeo/dsgd:node
+        env:
+        - name: DSGD_NODE_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: DSGD_NODE_PORT
+          value: 4000
+        - name: DSGD_MASTER_HOST
+          value: dsgd-master
+        - name: DSGD_MASTER_PORT
+          value: 4000
+        - name: DSGD_ASYNC
+          value: false
+        - name: DSGD_RECORD
+          value: false
+        imagePullPolicy: Always
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: hub-private

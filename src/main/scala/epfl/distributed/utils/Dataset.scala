@@ -18,7 +18,6 @@ object Dataset {
 
     def dataReader(filename: String): CsvReader[ReadResult[Vector[String]]] = {
       val url = File(s"$folder/$filename").url
-      println(url)
       url.asCsvReader[Vector[String]](rfc.withCellSeparator(' '))
     }
 

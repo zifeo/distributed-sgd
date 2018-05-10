@@ -33,7 +33,6 @@ spec:
       labels:
         app: influxdb
     spec:
-      hostname: influxdb
       containers:
       - name: influxdb
         image: zifeo/dsgd:influxdb
@@ -61,7 +60,6 @@ spec:
       labels:
         app: grafana
     spec:
-      hostname: grafana
       containers:
       - name: grafana
         image: zifeo/dsgd:grafana
