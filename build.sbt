@@ -7,7 +7,7 @@ import sbtassembly.PathList
 name := "Distributed-sgd"
 version := "0.1.0"
 
-scalaVersion := "2.12.5"
+scalaVersion := "2.12.6"
 scalacOptions ++= List(
     "-deprecation",
     "-encoding",
@@ -48,8 +48,6 @@ scalacOptions ++= List(
     //"-Ywarn-unused-import"
     //"-Ywarn-value-discard"
 )
-
-scalacOptions in (Compile, console) --= Seq("-Ywarn-unused:imports", "-Xfatal-warnings")
 
 scalacOptions in Test --= Seq("-Ywarn-value-discard", "-Ywarn-unused:privates")
 
