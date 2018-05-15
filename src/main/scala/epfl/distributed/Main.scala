@@ -53,7 +53,7 @@ object Main extends App {
         master.stop()
       }
 
-      master.onSlaveJoin { (slaveCount: Int) =>
+      master.onSlaveJoin { slaveCount =>
         if (slaveCount == 3) {
           import Pool.AwaitableFuture
           val epochs = 5

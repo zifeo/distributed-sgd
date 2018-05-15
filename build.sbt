@@ -1,7 +1,3 @@
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-
-import sbt.Package.ManifestAttributes
 import sbtassembly.PathList
 
 name := "Distributed-sgd"
@@ -51,6 +47,10 @@ scalacOptions ++= List(
 scalacOptions in Test --= List(
     "-Ywarn-value-discard",
     "-Ywarn-unused:privates"
+)
+scalacOptions in (Compile, console) --= Seq(
+    "-Ywarn-unused:imports",
+    "-Xfatal-warnings"
 )
 
 resolvers += Resolver.sonatypeRepo("releases")

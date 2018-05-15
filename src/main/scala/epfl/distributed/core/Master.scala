@@ -1,10 +1,10 @@
 package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
+import epfl.distributed.core.core.SlaveGrpc.SlaveStub
 import epfl.distributed.core.core._
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
-import io.grpc.ManagedChannel
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -14,7 +14,7 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
 
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
   private val log                                  = Logger(s"master-${pretty(node)}")
-  private val slaves                               = TrieMap[Node, ManagedChannel]()
+  private val slaves                               = TrieMap[Node, SlaveStub]()
   private val server                               = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
 
   // need to change this
@@ -43,13 +43,13 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
   }
 
   def forward(weights: Vec): Future[Array[Double]] = {
-    val workers = slaves.values.map(SlaveGrpc.stub)
+    val workers = slaves.values
     val piece   = Math.floorDiv(data.length, workers.size)
 
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
-        val req = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
+        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
         worker.forward(req)
     }
 
@@ -77,7 +77,7 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     log.info(s"dsgd start")
 
     val init             = weights
-    val workersWithIndex = slaves.values.map(SlaveGrpc.stub).zipWithIndex
+    val workersWithIndex = slaves.values.zipWithIndex
     val piece            = Math.floorDiv(data.length, workersWithIndex.size)
 
     val result = loop(1 to epochs)(init) { // epoch
@@ -125,19 +125,31 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
   class MasterImpl extends MasterGrpc.Master {
 
     def registerSlave(node: Node): Future[Ack] = {
+      val stub = SlaveGrpc.stub(newChannel(node.host, node.port))
+
+      val slavesSnap = slaves.readOnlySnapshot()
+      slaves.put(node, stub)
+
       log.info(s"new slave ${pretty(node)}")
 
-      val channel = newChannel(node.host, node.port)
-      slaves.put(node, channel)
+      slavesSnap.foreach {
+        case (otherNode, otherStub) =>
+          otherStub.registerSlave(node)
+          stub.registerSlave(otherNode)
+      }
+
       val ack = Future.successful(Ack())
-      ack.onComplete(_ => slaveJoinCallbacks.foreach(_(slaves.size)))
+      ack.onComplete(_ => slaveJoinCallbacks.foreach(_(slavesSnap.size + 1)))
       ack
     }
 
     def unregisterSlave(node: Node): Future[Ack] = {
+      slaves.remove(node)
+
       log.info(s"exit slave ${pretty(node)}")
 
-      slaves.remove(node)
+      slaves.values.foreach(_.unregisterSlave(node))
+
       Future.successful(Ack())
     }
   }

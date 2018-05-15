@@ -17,6 +17,9 @@ message Ack {}
 
 
 service Slave {
+    rpc RegisterSlave (Node) returns (Ack) {}
+    rpc UnregisterSlave (Node) returns (Ack) {}
+
     rpc Forward (ForwardRequest) returns (ForwardReply) {}
     rpc Gradient (GradientRequest) returns (GradientReply) {}
 }
