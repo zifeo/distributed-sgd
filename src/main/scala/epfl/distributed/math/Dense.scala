@@ -4,10 +4,10 @@ import spire.math._
 import spire.random.rng.Cmwc5
 import spire.random.{Exponential, Gaussian, Uniform}
 
-case class Dense(v: IndexedSeq[Number]) extends Vec {
-  require(v.nonEmpty, "A vector cannot be empty")
+case class Dense(override val values: IndexedSeq[Number]) extends Vec {
+  require(values.nonEmpty, "A vector cannot be empty")
 
-  def apply(indices: Iterable[Int]): Dense = Dense(indices.map(v(_)).toIndexedSeq)
+  def apply(indices: Iterable[Int]): Dense = Dense(indices.map(values(_)).toIndexedSeq)
 
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
     require(other.size == size, "Can't perform element-wise operation on vectors of different length")
@@ -15,7 +15,7 @@ case class Dense(v: IndexedSeq[Number]) extends Vec {
     other match {
       case Dense(otherValues) =>
         Dense(
-            v zip otherValues map {
+            values zip otherValues map {
               case (e1, e2) => op(e1, e2)
             }
         )
@@ -24,29 +24,26 @@ case class Dense(v: IndexedSeq[Number]) extends Vec {
     }
   }
 
-  override def mapValues(op: Number => Number): Vec = Dense(v.map(op))
+  override def mapValues(op: Number => Number): Vec = Dense(values.map(op))
 
-  override def size: Int = v.size
+  override def size: Int = values.size
 
-  override def foldLeft[B](init: B)(op: (B, Number) => B): B = v.foldLeft(init)(op)
+  override def foldLeft[B](init: B)(op: (B, Number) => B): B = values.foldLeft(init)(op)
 
-  override def map: Map[Int, Number] = v.indices.zip(v).toMap
+  override def map: Map[Int, Number] = values.indices.zip(values).toMap
 
   override def sparse: Sparse = {
     Sparse(
-        v.indices
-          .zip(v)
-          .filter {
-            case (_, num) => abs(num) > Sparse.epsilon
-          }
-          .toMap,
+        map.filter {
+          case (_, num) => abs(num) > Sparse.epsilon
+        },
         size
     )
   }
 
   def nonZeroIndices(epsilon: Number = 1e-20): Iterable[Int] = {
-    v.indices.view
-      .zip(v)
+    values.indices.view
+      .zip(values)
       .filter {
         case (_, num) => abs(num) > Sparse.epsilon
       }
@@ -54,7 +51,7 @@ case class Dense(v: IndexedSeq[Number]) extends Vec {
       .force
   }
 
-  override def nonZeroCount(epsilon: Number): Int = v.count(abs(_) < Sparse.epsilon)
+  override def nonZeroCount(epsilon: Number): Int = values.count(abs(_) < Sparse.epsilon)
 }
 
 object Dense {

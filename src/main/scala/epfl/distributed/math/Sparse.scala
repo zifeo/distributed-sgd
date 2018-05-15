@@ -19,9 +19,7 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
   }
 
   override def mapValues(op: Number => Number): Vec = {
-    val zeroTransformed = op(Number.zero)
-
-    if (zeroTransformed === Number.zero) {
+    if (op(Number.zero) === Number.zero) {
       //Default value stays zero
       Sparse(map.mapValues(op), size)
     }
@@ -31,7 +29,7 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
     }
   }
 
-  override def foldLeft[B](init: B)(op: (B, Number) => B): B = map.values.foldLeft(init)(op)
+  override def foldLeft[B](init: B)(op: (B, Number) => B): B = values.foldLeft(init)(op)
 
   override def sparse: Sparse = this
 

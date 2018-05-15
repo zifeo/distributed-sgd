@@ -17,7 +17,7 @@ object SparseBench extends Bench.LocalTime {
   val featuresCount = 47236
 
   //val data = Gen.enumeration("data")(Dataset.rcv1(30): _*)
-  val data = Dataset.rcv1(70)
+  val data = Dataset.rcv1("data", Some(70))
 
   val sparseVectors = Gen.single[Array[Vec]]("Sparse")(data.map {
     case (x, _) => Sparse(x, featuresCount)

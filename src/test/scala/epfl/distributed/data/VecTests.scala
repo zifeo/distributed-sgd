@@ -1,7 +1,7 @@
 package epfl.distributed.data
 
 import epfl.distributed.Spec
-import epfl.distributed.math.{Sparse, Vec}
+import epfl.distributed.math.{Dense, Sparse, Vec}
 
 class VecTests extends Spec {
 
@@ -26,8 +26,11 @@ class VecTests extends Spec {
         val v2 = Sparse(Map(1 -> 1, 2 -> 2, 3 -> 3), 4)
 
         v1 + v2 shouldBe Sparse(Map(0 -> 1, 1 -> 3, 2 -> 5, 3 -> 3), 4)
+      }
 
-        println((v1 + v2).map)
+      "raise an error in case of NaN" in {
+        an [IllegalArgumentException] should be thrownBy Sparse(Map(0 -> 1, 1 -> 2, 2 -> 3), 4) / 0
+        an [IllegalArgumentException] should be thrownBy Dense(1, 2, 3, 4) / 0
       }
 
     }

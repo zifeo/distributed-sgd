@@ -5,6 +5,12 @@ import spire.random.{Exponential, Gaussian, Uniform}
 
 trait Vec {
 
+  def map: Map[Int, Number]
+
+  def values: Iterable[Number] = map.values
+
+  require(!values.exists(_ == Double.NaN), "Trying to build a Vec with a NaN value")
+
   def size: Int
 
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec
@@ -14,8 +20,6 @@ trait Vec {
   def foldLeft[B](init: B)(op: (B, Number) => B): B
 
   def sparse: Vec
-
-  def map: Map[Int, Number]
 
   def +(other: Vec): Vec = elementWiseOp(other, _ + _)
 

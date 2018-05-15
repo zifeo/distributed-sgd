@@ -70,7 +70,6 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         .reduce(_ + _)
 
       val gradResp = (grad * -step).map.mapValues(_.toDouble)
-      //require(!gradResp.values.exists(_.isNaN), "NaN detected in grad response")
 
       GradientReply(gradResp, receivedAt, System.currentTimeMillis())
     }

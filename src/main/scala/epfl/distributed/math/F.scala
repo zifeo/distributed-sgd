@@ -9,7 +9,7 @@ case class F(f: Dense => Number) {
 
   def gradient(v: Dense): Dense = {
     Dense(
-        v.v.zipWithIndex.map {
+        v.values.zipWithIndex.map {
           case (xi, idx) =>
             val xiBigD = xi.toBigDecimal
             (f(Dense.oneHot(xiBigD + delta, v.size, idx)) - f(Dense.oneHot(xiBigD - delta, v.size, idx))) / (2 * delta)

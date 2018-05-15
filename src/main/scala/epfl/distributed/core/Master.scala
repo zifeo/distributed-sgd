@@ -49,7 +49,6 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
-        //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in forward weights")
         val req = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
         worker.forward(req)
     }
@@ -76,7 +75,6 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
      */
 
     log.info(s"dsgd start")
-    //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in initial weights")
 
     val init             = weights
     val workersWithIndex = slaves.values.map(SlaveGrpc.stub).zipWithIndex
@@ -94,7 +92,6 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
               case (worker, i) =>
                 val sample = i * piece + batch
 
-                //assert(!weights.map.mapValues(_.toDouble).exists(_._2.isNaN), "NaN detected in values")
                 val req =
                   GradientRequest(
                       sample until Math.min(sample + batchSize, i * piece + piece),
