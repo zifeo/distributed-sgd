@@ -68,8 +68,8 @@ libraryDependencies ++= List(
     "com.github.pathikrit"       %% "better-files"         % "3.4.0",
     "org.scalatest"              %% "scalatest"            % "3.0.5" % "test",
     "com.storm-enroute"          %% "scalameter"           % "0.9" % "test",
-    "io.kamon"                   %% "kamon-core"           % "1.1.0",
-    "io.kamon"                   %% "kamon-executors"      % "1.0.0",
+    "io.kamon"                   %% "kamon-core"           % "1.1.2",
+    "io.kamon"                   %% "kamon-executors"      % "1.0.1",
     "io.kamon"                   %% "kamon-influxdb"       % "1.0.1"
 )
 
