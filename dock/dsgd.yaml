@@ -10,9 +10,7 @@ spec:
     app: dsgd-master
 
   ports:
-  - protocol: TCP
-    port: 4000
-    targetPort: 4000
+  - port: 4000
 
 ---
 
@@ -24,6 +22,7 @@ metadata:
 
 spec:
   replicas: 1
+
   selector:
     matchLabels:
       app: dsgd-master
@@ -36,7 +35,6 @@ spec:
       containers:
       - name: dsgd-master
         image: zifeo/dsgd:node
-        imagePullPolicy: Always
         env:
         - name: DSGD_NODE_HOST
           valueFrom:
@@ -54,20 +52,41 @@ spec:
           value: "false"
         - name: DSGD_RECORD
           value: "false"
+        - name: DSGD_DATA_PATH
+          value: "/opt/mnt/datasets"
+        imagePullPolicy: Always
       restartPolicy: Always
       imagePullSecrets:
         - name: hub-private
 
 ---
 
-kind: Deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: dsgd-slave
+
+spec:
+  clusterIP: None
+  selector:
+    app: dsgd-slave
+
+  ports:
+  - port: 4000
+
+---
+
 apiVersion: apps/v1
+kind: StatefulSet
 
 metadata:
   name: dsgd-slave
 
 spec:
+  serviceName: dsgd-slave
   replicas: 3
+  podManagementPolicy: Parallel
+
   selector:
     matchLabels:
       app: dsgd-slave
@@ -76,6 +95,7 @@ spec:
     metadata:
       labels:
         app: dsgd-slave
+
     spec:
       containers:
       - name: dsgd-slave
@@ -95,7 +115,22 @@ spec:
           value: "false"
         - name: DSGD_RECORD
           value: "false"
+        - name: DSGD_DATA_PATH
+          value: "/opt/mnt/datasets"
         imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+        volumeMounts:
+        - name: mnt
+          mountPath: /opt/mnt
       restartPolicy: Always
       imagePullSecrets:
-        - name: hub-private
+      - name: hub-private
+
+      volumes:
+      - name: mnt
+        persistentVolumeClaim:
+          claimName: cs449g4-scratch
+

@@ -19,6 +19,8 @@ object Main extends App {
 
   val config = pureconfig.loadConfigOrThrow[Config]("dsgd")
   log.info("{}", config)
+  log.info("cpu: {}", Runtime.getRuntime.availableProcessors())
+  log.info("mem: {}", Runtime.getRuntime.maxMemory())
 
   // current node (see application.conf, can be set using env vars)
   val node = Node(config.host, config.port)
