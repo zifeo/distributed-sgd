@@ -60,6 +60,7 @@ libraryDependencies ++= List(
     "com.typesafe"               % "config"                % "1.3.3",
     "io.grpc"                    % "grpc-netty"            % scalapb.compiler.Version.grpcJavaVersion,
     "com.thesamet.scalapb"       %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion,
+    "com.thesamet.scalapb"       %% "scalapb-runtime"      % scalapb.compiler.Version.scalapbVersion % "protobuf",
     "com.github.pureconfig"      %% "pureconfig"           % "0.9.1",
     "org.typelevel"              %% "spire"                % "0.15.0",
     "com.typesafe.scala-logging" %% "scala-logging"        % "3.9.0",

@@ -63,8 +63,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     }
 
     def forward(request: ForwardRequest): Future[ForwardReply] = Future {
-      val ForwardRequest(samplesIdx, weights) = request
-      val w                                   = Vec(weights, data.head._1.size)
+      val ForwardRequest(samplesIdx, w) = request
 
       val preds = samplesIdx.map { idx =>
         val (x, y) = data(idx)
@@ -76,8 +75,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
       val receivedAt                                         = System.currentTimeMillis()
-      val GradientRequest(samplesIdx, step, lambda, weights) = request
-      val w                                                  = Vec(weights, data.head._1.size)
+      val GradientRequest(samplesIdx, step, lambda, Some(w)) = request
 
       val grad = samplesIdx
         .map { idx =>
@@ -86,9 +84,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         }
         .reduce(_ + _)
 
-      val gradResp = (grad * -step).map.mapValues(_.toDouble)
-
-      GradientReply(gradResp, receivedAt, System.currentTimeMillis())
+      GradientReply(grad * -step, receivedAt, System.currentTimeMillis())
     }
 
   }

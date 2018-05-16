@@ -1,7 +1,11 @@
 package epfl.distributed.math
 
+import epfl.distributed.core
+import scalapb.TypeMapper
 import spire.math.{Number, Numeric, sqrt}
 import spire.random.{Exponential, Gaussian, Uniform}
+
+import scala.language.implicitConversions
 
 trait Vec {
 
@@ -66,6 +70,16 @@ trait Vec {
 }
 
 object Vec {
+
+  implicit val numberTypeMapper = TypeMapper[Double, Number](Number(_))(_.toDouble)
+
+  implicit val typeMapper: TypeMapper[core.core.Sparse, Vec] =
+    TypeMapper[core.core.Sparse, Vec](sparse => Vec(sparse.map, sparse.size))(vec =>
+      core.core.Sparse(vec.map, vec.size))
+
+  //Because nested messages (Sparse in our case) are serialized as Options in proto3, we provide those to make life easier
+  implicit def toOptional(vec: Vec): Option[Vec]   = Option(vec)
+  implicit def fromOptional(vec: Option[Vec]): Vec = vec.get
 
   def apply(numbers: Number*): Dense          = Dense(numbers.toVector)
   def apply(numbers: Iterable[Number]): Dense = Dense(numbers.toVector)

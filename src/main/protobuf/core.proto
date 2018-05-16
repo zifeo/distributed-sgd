@@ -2,6 +2,12 @@ syntax = "proto3";
 
 package epfl.distributed.core;
 
+import "scalapb/scalapb.proto";
+
+option (scalapb.options) = {
+  import: "epfl.distributed.math.Vec.numberTypeMapper"
+};
+
 
 service Master {
     rpc RegisterSlave (Node) returns (Ack) {}
@@ -24,9 +30,14 @@ service Slave {
     rpc Gradient (GradientRequest) returns (GradientReply) {}
 }
 
+message Sparse {
+    map<int32, double> map = 1 [(scalapb.field).value_type = "spire.math.Number"];
+    int32 size = 2;
+}
+
 message ForwardRequest {
     repeated int32 samples = 1 [packed=true];
-    map<int32, double> weights = 2;
+    Sparse weights = 2 [(scalapb.field).type = "epfl.distributed.math.Vec"];
 }
 
 message ForwardReply {
@@ -37,11 +48,11 @@ message GradientRequest {
     repeated int32 samples = 1 [packed=true];
     double step = 2;
     double lambda = 3;
-    map<int32, double> weights = 4;
+    Sparse weights = 4 [(scalapb.field).type = "epfl.distributed.math.Vec"];
 }
 
 message GradientReply {
-    map<int32, double> grad = 1;
+    Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec"];
     int64 startedAt = 2;
     int64 terminatedAt = 3;
 }

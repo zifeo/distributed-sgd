@@ -49,7 +49,7 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     val work = workers.zipWithIndex.map {
       case (worker, i) =>
         val sample = i * piece
-        val req    = ForwardRequest(sample until (sample + piece), weights.map.mapValues(_.toDouble))
+        val req    = ForwardRequest(sample until (sample + piece), weights)
         worker.forward(req)
     }
 
@@ -93,17 +93,13 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
                 val sample = i * piece + batch
 
                 val req =
-                  GradientRequest(
-                      sample until Math.min(sample + batchSize, i * piece + piece),
-                      0.1,
-                      0,
-                      batchWeights.map.mapValues(_.toDouble))
+                  GradientRequest(sample until Math.min(sample + batchSize, i * piece + piece), 0.1, 0, batchWeights)
                 worker.gradient(req)
             }
             Future
               .sequence(work)
               .map { res =>
-                val grad        = Vec.mean(res.map(grad => Vec(grad.grad, batchWeights.size)))
+                val grad        = Vec.mean(res.map(_.grad.get))
                 val durations   = res.map(x => x.terminatedAt - x.startedAt)
                 val durationMax = durations.max / 1000.0
                 val durationMin = durations.min / 1000.0
