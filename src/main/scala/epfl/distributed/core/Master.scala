@@ -8,7 +8,8 @@ import epfl.distributed.utils.Pool
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContextExecutorService, Future}
+import scala.concurrent.stm._
+import scala.concurrent.{ExecutionContextExecutorService, Future, Promise}
 
 class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
 
@@ -16,6 +17,11 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
   private val log                                  = Logger(s"master-${pretty(node)}")
   private val slaves                               = TrieMap[Node, SlaveStub]()
   private val server                               = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
+
+  private val runningAsync = Ref(false)
+  private val asyncUpdates = Ref(0)
+  private val grad = Ref(Vec.zeros(1))
+  private var asyncWeightsPromise: Promise[Vec] = _
 
   // need to change this
   private val slaveJoinCallbacks = mutable.ListBuffer.empty[Int => Unit]
@@ -41,6 +47,34 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
   def onSlaveJoin(callback: Int => Unit): Unit = {
     slaveJoinCallbacks += callback
   }
+
+  /**
+    * Starts the async computation of the weights
+    *
+    * @param initialWeights The initial weights
+    * @param stoppingCriterion A function receiving (initial loss, current loss) and outputting whether to stop the computation
+    * @param checkEvery The number of gradient updates received by the master between loss checks
+    *
+    * @return The computed weights
+    */
+  def async(initialWeights: Vec, stoppingCriterion: (Number, Number) => Boolean, checkEvery: Int = 100): Future[Vec] = {
+    atomic { implicit txn =>
+      if(runningAsync()){
+        Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
+      }
+      else {
+        runningAsync() = true
+        grad() = initialWeights
+        asyncWeightsPromise = Promise[Vec]
+
+        slaves.values.foreach(_.initAsync(AsyncInit(initialWeights, ???))) //TODO samples assignment
+
+        asyncWeightsPromise.future
+      }
+    }
+  }
+
+  def checkLoss: Number = ???
 
   def forward(weights: Vec): Future[Array[Double]] = {
     val workers = slaves.values
@@ -145,6 +179,22 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
       log.info(s"exit slave ${pretty(node)}")
 
       slaves.values.foreach(_.unregisterSlave(node))
+
+      Future.successful(Ack())
+    }
+
+    def updateGrad(request: GradUpdate): scala.concurrent.Future[Ack] = {
+      require(async, "Cannot update gradient: Master is in synchronous mode.")
+
+      atomic {implicit txn =>
+        grad.transform(_ - request.gradUpdate)
+        asyncUpdates += 1
+
+        //TODO Implement stopping criterion
+        if(asyncUpdates() % ??? == 0){
+          checkLoss
+        }
+      }
 
       Future.successful(Ack())
     }

@@ -3,6 +3,7 @@ syntax = "proto3";
 package epfl.distributed.core;
 
 import "scalapb/scalapb.proto";
+import "google/protobuf/empty.proto";
 
 option (scalapb.options) = {
   import: "epfl.distributed.math.Vec.numberTypeMapper"
@@ -12,6 +13,9 @@ option (scalapb.options) = {
 service Master {
     rpc RegisterSlave (Node) returns (Ack) {}
     rpc UnregisterSlave (Node) returns (Ack) {}
+
+    //Async operation
+    rpc UpdateGrad (GradUpdate) returns (Ack) {}
 }
 
 message Node {
@@ -26,8 +30,14 @@ service Slave {
     rpc RegisterSlave (Node) returns (Ack) {}
     rpc UnregisterSlave (Node) returns (Ack) {}
 
+    //Sync operations
     rpc Forward (ForwardRequest) returns (ForwardReply) {}
     rpc Gradient (GradientRequest) returns (GradientReply) {}
+
+    //Async operations
+    rpc InitAsync (AsyncInit) returns (Ack) {}
+    rpc UpdateGrad (GradUpdate) returns (Ack) {}
+    rpc StopAsync (google.protobuf.Empty) returns (Ack) {}
 }
 
 message Sparse {
@@ -55,4 +65,14 @@ message GradientReply {
     Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec"];
     int64 startedAt = 2;
     int64 terminatedAt = 3;
+}
+
+message AsyncInit {
+    Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec"];
+    repeated int32 samples = 2;
+}
+
+message GradUpdate {
+    Sparse gradUpdate = 1 [(scalapb.field).type = "epfl.distributed.math.Vec"];
+    repeated int32 updatingSamples = 2;
 }

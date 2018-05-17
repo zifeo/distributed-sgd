@@ -8,7 +8,9 @@ import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContextExecutorService, Future}
+import scala.util.Random
 
 class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean) {
 
@@ -17,6 +19,16 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   private val server                               = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
   private val masterChannel                        = newChannel(master.host, master.port)
   private val otherSlaves                          = TrieMap[Node, SlaveStub]()
+
+  private val dataLength = data.length
+
+  private val gamma = 1d / dataLength
+
+  private val runningAsync = Ref(false)
+
+  private val assignedSamples = Ref(Seq.empty[Int])
+
+  private val grad = Ref(Vec.zeros(1))
 
   def start(): Unit = {
     require(!ec.isShutdown)
@@ -44,6 +56,26 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   def awaitTermination(): Unit = {
     log.info("waiting")
     server.awaitTermination()
+  }
+
+  def asyncComputation(): Unit = {
+    val again = atomic { implicit txn =>
+      if (runningAsync()) {
+        val idx    = Random.nextInt(dataLength)
+        val (x, y) = data(idx)
+
+        val gradUpdate = model.backward(grad(), x, y) * gamma
+        grad.transform(_ - gradUpdate)
+        otherSlaves.values.foreach(_.updateGrad(GradUpdate(gradUpdate, Seq(idx))))
+
+        true //Still running in async mode
+      }
+      else {
+        false //The computation has stopped
+      }
+    }
+
+    if(again) asyncComputation() else ()
   }
 
   class SlaveImpl extends SlaveGrpc.Slave {
@@ -85,6 +117,39 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         .reduce(_ + _)
 
       GradientReply(grad * -step, receivedAt, System.currentTimeMillis())
+    }
+
+    def initAsync(request: AsyncInit): Future[Ack] = {
+      require(async, "Cannot initialize async computation: slave is in synchronous mode.")
+
+      atomic { implicit txn =>
+        if (runningAsync()) {
+          Future.failed(
+              new IllegalStateException("Async computation already running, can't be initialized unless stopped first"))
+        }
+        else {
+          runningAsync() = true
+          grad() = request.grad
+          assignedSamples() = request.samples
+          asyncComputation()
+
+          Future.successful(Ack())
+        }
+      }
+    }
+
+    def updateGrad(request: GradUpdate): Future[Ack] = {
+      require(async, "Cannot update gradient: slave is in synchronous mode.")
+
+      grad.single.transform(_ - request.gradUpdate)
+      Future.successful(Ack())
+    }
+
+    def stopAsync(request: com.google.protobuf.empty.Empty): Future[Ack] = {
+      require(async, "Cannot stop async computation: slave is in synchronous mode.")
+
+      runningAsync.single() = false
+      Future.successful(Ack())
     }
 
   }

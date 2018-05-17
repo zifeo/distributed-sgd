@@ -66,6 +66,7 @@ libraryDependencies ++= List(
     "com.typesafe.scala-logging" %% "scala-logging"        % "3.9.0",
     "com.nrinaudo"               %% "kantan.csv"           % "0.4.0",
     "com.github.pathikrit"       %% "better-files"         % "3.4.0",
+    "org.scala-stm"              %% "scala-stm"            % "0.8",
     "org.scalatest"              %% "scalatest"            % "3.0.5" % "test",
     "com.storm-enroute"          %% "scalameter"           % "0.9" % "test",
     "io.kamon"                   %% "kamon-core"           % "1.1.2",
