@@ -57,4 +57,6 @@ object Dataset {
     entries.fold(data.toArray)(data.take(_).toArray)
   }
 
+  def rcv1(folder: String, entries: Int): Array[(Map[Int, Number], Int)] = rcv1(folder, Some(entries))
+
 }

@@ -39,7 +39,7 @@ object Main extends App {
 
   val featuresCount = 47236
 
-  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, Some(100)).map {
+  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, 100).map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
 

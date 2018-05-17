@@ -92,10 +92,18 @@ object Vec {
     Sparse(m.mapValues(num.toNumber), size)
   }
 
-  def zeros(size: Int): Vec                               = Sparse.zeros(size)
-  def ones(size: Int): Vec                                = Dense.ones(size)
-  def fill(value: Number, size: Int): Dense               = Dense.fill(value, size)
-  def oneHot(value: Number, index: Int, size: Int): Dense = Dense.oneHot(value, index, size)
+  def zeros(size: Int): Vec                 = Sparse.zeros(size)
+  def ones(size: Int): Vec                  = Dense.ones(size)
+  def fill(value: Number, size: Int): Dense = Dense.fill(value, size)
+
+  def oneHot(value: Number, index: Int, size: Int): Vec = {
+    if (value === Number.zero) {
+      zeros(size)
+    }
+    else {
+      Dense.oneHot(value, index, size)
+    }
+  }
 
   def sum(vecs: Iterable[Vec]): Vec = {
     require(vecs.nonEmpty)
