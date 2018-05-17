@@ -20,13 +20,11 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   private val masterChannel                        = newChannel(master.host, master.port)
   private val otherSlaves                          = TrieMap[Node, SlaveStub]()
 
-  private val dataLength = data.length
-
-  private val gamma = 1d / dataLength
+  private val gamma = 1d / data.length
 
   private val runningAsync = Ref(false)
 
-  private val assignedSamples = Ref(Seq.empty[Int])
+  private var assignedSamples: Seq[Int] = _
 
   private val grad = Ref(Vec.zeros(1))
 
@@ -61,7 +59,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   def asyncComputation(): Unit = {
     val again = atomic { implicit txn =>
       if (runningAsync()) {
-        val idx    = Random.nextInt(dataLength)
+        val idx    = assignedSamples(Random.nextInt(assignedSamples.size))
         val (x, y) = data(idx)
 
         val gradUpdate = model.backward(grad(), x, y) * gamma
@@ -75,7 +73,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
       }
     }
 
-    if(again) asyncComputation() else ()
+    if (again) asyncComputation() else ()
   }
 
   class SlaveImpl extends SlaveGrpc.Slave {
@@ -102,12 +100,12 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         model(w, x)
       }
 
-      ForwardReply(preds.map(_.toDouble))
+      ForwardReply(preds)
     }
 
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
-      val receivedAt                                         = System.currentTimeMillis()
-      val GradientRequest(samplesIdx, step, lambda, Some(w)) = request
+      val receivedAt                                   = System.currentTimeMillis()
+      val GradientRequest(samplesIdx, step, lambda, w) = request
 
       val grad = samplesIdx
         .map { idx =>
@@ -130,7 +128,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         else {
           runningAsync() = true
           grad() = request.grad
-          assignedSamples() = request.samples
+          assignedSamples = request.samples
           asyncComputation()
 
           Future.successful(Ack())

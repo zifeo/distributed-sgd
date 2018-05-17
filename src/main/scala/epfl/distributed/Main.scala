@@ -57,7 +57,7 @@ object Main extends App {
 
       master.onSlaveJoin { slaveCount =>
         import Pool.AwaitableFuture
-        val w0   = Vec.zeros(featuresCount)
+        val w0 = Vec.zeros(featuresCount)
 
         if (slaveCount == 3) {
           if (async) {
@@ -66,17 +66,11 @@ object Main extends App {
           else {
             val epochs = 5
 
-            val res0 = master.forward(w0).await
-            println("Initial loss: " + res0.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
+            println("Initial loss: " + master.computeLoss(w0).await)
 
-            val w1   = master.backward(epochs = epochs, weights = w0).await
-            val res1 = master.forward(w1).await
+            val w1 = master.backward(epochs = epochs, weights = w0).await
 
-            println(
-                s"End loss after $epochs epochs: " + res1
-                  .zip(data)
-                  .map { case (p, (_, y)) => Math.pow(p - y, 2) }
-                  .sum / data.length)
+            println(s"End loss after $epochs epochs: " + master.computeLoss(w1).await)
           }
         }
       }
@@ -109,18 +103,12 @@ object Main extends App {
       import Pool.AwaitableFuture
       val epochs = 5
 
-      val w0   = Vec.zeros(featuresCount)
-      val res0 = master.forward(w0).await
-      println("Initial loss: " + res0.zip(data).map { case (p, (_, y)) => Math.pow(p - y, 2) }.sum / data.length)
+      val w0 = Vec.zeros(featuresCount)
+      println("Initial loss: " + master.computeLoss(w0).await)
 
-      val w1   = master.backward(epochs = epochs, weights = w0).await
-      val res1 = master.forward(w1).await
+      val w1 = master.backward(epochs = epochs, weights = w0).await
 
-      println(
-          s"End loss after $epochs epochs: " + res1
-            .zip(data)
-            .map { case (p, (_, y)) => Math.pow(p - y, 2) }
-            .sum / data.length)
+      println(s"End loss after $epochs epochs: " + master.computeLoss(w1).await)
 
       slaves.foreach(_.stop())
       master.stop()

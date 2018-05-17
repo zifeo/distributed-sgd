@@ -47,32 +47,32 @@ message Sparse {
 
 message ForwardRequest {
     repeated int32 samples = 1 [packed=true];
-    Sparse weights = 2 [(scalapb.field).type = "epfl.distributed.math.Vec"];
+    Sparse weights = 2 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
 }
 
 message ForwardReply {
-    repeated double predictions = 1 [packed=true];
+    repeated double predictions = 1 [(scalapb.field).type = "spire.math.Number"];
 }
 
 message GradientRequest {
     repeated int32 samples = 1 [packed=true];
     double step = 2;
     double lambda = 3;
-    Sparse weights = 4 [(scalapb.field).type = "epfl.distributed.math.Vec"];
+    Sparse weights = 4 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
 }
 
 message GradientReply {
-    Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec"];
+    Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
     int64 startedAt = 2;
     int64 terminatedAt = 3;
 }
 
 message AsyncInit {
-    Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec"];
+    Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
     repeated int32 samples = 2;
 }
 
 message GradUpdate {
-    Sparse gradUpdate = 1 [(scalapb.field).type = "epfl.distributed.math.Vec"];
+    Sparse gradUpdate = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
     repeated int32 updatingSamples = 2;
 }
