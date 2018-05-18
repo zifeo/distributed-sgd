@@ -17,7 +17,10 @@ import scala.util.Success
 
 class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
 
-  private case class AsyncConfig(initialWeights: Vec, stoppingCriterion: Seq[Number] => Boolean, checkEvery: Int)
+  private case class AsyncConfig(initialWeights: Vec,
+                                 stoppingCriterion: Seq[Number] => Boolean,
+                                 splitStrategy: (Array[(Vec, Int)], Int) => Seq[Seq[Int]],
+                                 checkEvery: Int)
 
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
   private val log                                  = Logger(s"master-${pretty(node)}")
@@ -62,11 +65,15 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     *
     * @param initialWeights The initial weights
     * @param stoppingCriterion A function receiving (initial loss, current loss) and outputting whether to stop the computation
+    * @param splitStrategy A function from (data, number workers) to a sequence of the assigned samples for each worker
     * @param checkEvery The number of gradient updates received by the master between loss checks
     *
     * @return The computed weights
     */
-  def async(initialWeights: Vec, stoppingCriterion: Seq[Number] => Boolean, checkEvery: Int = 100): Future[Vec] = {
+  def async(initialWeights: Vec,
+            stoppingCriterion: Seq[Number] => Boolean,
+            splitStrategy: (Array[(Vec, Int)], Int) => Seq[Seq[Int]],
+            checkEvery: Int = 100): Future[Vec] = {
     atomic { implicit txn =>
       if (runningAsync()) {
         Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
@@ -75,11 +82,15 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
         runningAsync() = true
         grad() = initialWeights
 
-        asyncConfig = AsyncConfig(initialWeights, stoppingCriterion, checkEvery)
+        asyncConfig = AsyncConfig(initialWeights, stoppingCriterion, splitStrategy, checkEvery)
         asyncWeightsPromise = Promise[Vec]
 
-        slaves.values.foreach(_.initAsync(AsyncInit(initialWeights, ???))) //TODO samples assignment
+        val workers = slaves.values
+        val split   = splitStrategy(data, workers.size)
 
+        workers.zip(split).foreach {
+          case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment))
+        }
         asyncWeightsPromise.future
       }
     }
