@@ -61,7 +61,8 @@ object Main extends App {
 
         if (slaveCount == 3) {
           if (async) {
-            val w1 = master.async(w0, ???).await //TODO specify stopping criterion
+            val w1 = master.async(w0, 1e6.toInt, ???, 100, ???, ???).await //TODO specify stopping criterion
+            //println("")
           }
           else {
             val epochs = 5

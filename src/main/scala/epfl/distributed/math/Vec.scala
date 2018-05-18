@@ -102,11 +102,10 @@ object Vec {
   }
 
   def sum(vecs: Iterable[Vec]): Vec = {
-    require(vecs.nonEmpty)
-    val fst :: others = vecs
-    require(others.forall(_.size == fst.size))
-    others.foldLeft(fst)(_ + _)
+    require(vecs.nonEmpty, "Can't sum an empty list of vectors")
+    vecs.reduce(_ + _)
   }
+
   def mean(vecs: Iterable[Vec]): Vec = sum(vecs) / vecs.size
 
   def randU[N <: Number: Uniform](size: Int, min: N, max: N): Dense                = Dense.randU(size, min, max)

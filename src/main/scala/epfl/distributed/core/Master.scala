@@ -13,12 +13,14 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContextExecutorService, Future, Promise}
-import scala.util.Success
+import scala.util.{Failure, Success}
 
 class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
 
   private case class AsyncConfig(initialWeights: Vec,
+                                 maxSteps: Int,
                                  stoppingCriterion: Seq[Number] => Boolean,
+                                 batchSize: Int,
                                  splitStrategy: (Array[(Vec, Int)], Int) => Seq[Seq[Int]],
                                  checkEvery: Int)
 
@@ -27,13 +29,12 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
   private val slaves                               = TrieMap[Node, SlaveStub]()
   private val server                               = newServer(MasterGrpc.bindService(new MasterImpl, ec), node.port)
 
-  private val runningAsync      = Ref(false)
-  private val grad              = Ref(Vec.zeros(1))
-  private val asyncUpdatesCount = Ref(0)
-  private val losses            = Ref(ArrayBuffer.empty[Number])
+  private val grad                = Ref(Vec.zeros(1))
+  private val asyncWeightsPromise = Ref(Option.empty[Promise[Vec]])
+  private val asyncUpdatesCount   = Ref(0)
+  private val losses              = Ref(ArrayBuffer.empty[Number])
 
-  private var asyncConfig: AsyncConfig          = _
-  private var asyncWeightsPromise: Promise[Vec] = _
+  private var asyncConfig: AsyncConfig = _
 
   // need to change this
   private val slaveJoinCallbacks = mutable.ListBuffer.empty[Int => Unit]
@@ -71,27 +72,30 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     * @return The computed weights
     */
   def async(initialWeights: Vec,
+            maxSteps: Int,
             stoppingCriterion: Seq[Number] => Boolean,
+            batchSize: Int,
             splitStrategy: (Array[(Vec, Int)], Int) => Seq[Seq[Int]],
             checkEvery: Int = 100): Future[Vec] = {
     atomic { implicit txn =>
-      if (runningAsync()) {
+      if (asyncWeightsPromise().nonEmpty) {
         Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
       }
       else {
-        runningAsync() = true
         grad() = initialWeights
 
-        asyncConfig = AsyncConfig(initialWeights, stoppingCriterion, splitStrategy, checkEvery)
-        asyncWeightsPromise = Promise[Vec]
+        asyncConfig = AsyncConfig(initialWeights, maxSteps, stoppingCriterion, batchSize, splitStrategy, checkEvery)
+
+        val weightsPromise = Promise[Vec]
+        asyncWeightsPromise() = Some(weightsPromise)
 
         val workers = slaves.values
         val split   = splitStrategy(data, workers.size)
 
         workers.zip(split).foreach {
-          case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment))
+          case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize))
         }
-        asyncWeightsPromise.future
+        weightsPromise.future
       }
     }
   }
@@ -214,30 +218,41 @@ class Master(node: Node, data: Array[(Vec, Int)], async: Boolean) {
     def updateGrad(request: GradUpdate): Future[Ack] = {
       require(async, "Cannot update gradient: Master is in synchronous mode.")
 
+      def endComputation(weightsPromise: Promise[Vec], newGrad: Vec): Unit = {
+        asyncWeightsPromise.transform(_ => None)
+        slaves.values.foreach(_.stopAsync(Empty()))
+
+        weightsPromise.complete(Success(newGrad))
+        ()
+      }
+
       atomic { implicit txn =>
-        if (runningAsync()) {
-          val newGrad = grad.transformAndGet(_ - request.gradUpdate)
-          asyncUpdatesCount += 1
+        asyncWeightsPromise() match {
+          case Some(weightsPromise) => //There's a promise => a computation is running
+            val newGrad      = grad.transformAndGet(_ - request.gradUpdate)
+            val updatesCount = asyncUpdatesCount.transformAndGet(_ + 1)
 
-          if (asyncUpdatesCount() % asyncConfig.checkEvery == 0) {
-            computeLoss(newGrad).onComplete {
-              case Success(loss) =>
-                val newLosses = losses.transformAndGet(_ += loss)
-
-                if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
-                  runningAsync() = false
-                  slaves.values.foreach(_.stopAsync(Empty()))
-
-                  asyncWeightsPromise.complete(Success(newGrad))
-                }
+            if (updatesCount >= asyncConfig.maxSteps) {
+              endComputation(weightsPromise, newGrad)
             }
-          }
+            else if (updatesCount % asyncConfig.checkEvery == 0) {
+              computeLoss(newGrad).onComplete {
+                case Success(loss) =>
+                  val newLosses = losses.transformAndGet(_ += loss)
 
-          Future.successful(Ack())
-        }
-        else {
-          Future.failed(
-              new IllegalStateException("Master async computation stopped: won't accept any gradient updates"))
+                  if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
+                    endComputation(weightsPromise, newGrad)
+                  }
+
+                case Failure(e) =>
+                  log.error("Failed to compute loss: {}", e)
+              }
+            }
+
+            Future.successful(Ack())
+          case None =>
+            Future.failed(
+                new IllegalStateException("Master async computation stopped: won't accept any gradient updates"))
         }
 
       }

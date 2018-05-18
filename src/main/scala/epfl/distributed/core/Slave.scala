@@ -25,8 +25,9 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   private val runningAsync = Ref(false)
 
   private var assignedSamples: Seq[Int] = _
+  private var batchSize: Int            = _
 
-  private val grad = Ref(Vec.zeros(1))
+  private val weights = Ref(Vec.zeros(1))
 
   def start(): Unit = {
     require(!ec.isShutdown)
@@ -59,12 +60,19 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   def asyncComputation(): Unit = {
     val again = atomic { implicit txn =>
       if (runningAsync()) {
-        val idx    = assignedSamples(Random.nextInt(assignedSamples.size))
-        val (x, y) = data(idx)
+        val samples = if (batchSize == 1) {
+          Seq(data(assignedSamples(Random.nextInt(assignedSamples.size))))
+        }
+        else {
+          Random.shuffle[Int, IndexedSeq](assignedSamples.indices) take batchSize map data
+        }
 
-        val gradUpdate = model.backward(grad(), x, y) * gamma
-        grad.transform(_ - gradUpdate)
-        otherSlaves.values.foreach(_.updateGrad(GradUpdate(gradUpdate, Seq(idx))))
+        val gradUpdate = Vec.sum(samples.map {
+          case (x, y) => model.backward(weights(), x, y)
+        }) * gamma
+
+        weights.transform(_ - gradUpdate)
+        otherSlaves.values.foreach(_.updateGrad(GradUpdate(gradUpdate)))
 
         true //Still running in async mode
       }
@@ -127,9 +135,10 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         }
         else {
           runningAsync() = true
-          grad() = request.grad
+          weights() = request.weights
           assignedSamples = request.samples
-          asyncComputation()
+          batchSize = request.batchSize
+          Future(asyncComputation())
 
           Future.successful(Ack())
         }
@@ -139,7 +148,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     def updateGrad(request: GradUpdate): Future[Ack] = {
       require(async, "Cannot update gradient: slave is in synchronous mode.")
 
-      grad.single.transform(_ - request.gradUpdate)
+      weights.single.transform(_ - request.gradUpdate)
       Future.successful(Ack())
     }
 
