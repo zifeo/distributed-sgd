@@ -4,6 +4,7 @@ import com.google.protobuf.empty.Empty
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.core.SlaveGrpc.SlaveStub
 import epfl.distributed.core.core._
+import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
 import epfl.distributed.core.ml.GradState
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
@@ -189,16 +190,16 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
 
   protected case class AsyncConfig(initialWeights: Vec,
                                    maxSteps: Int,
-                                   stoppingCriterion: Seq[Number] => Boolean,
+                                   stoppingCriterion: EarlyStopping,
                                    batchSize: Int,
-                                   splitStrategy: (Array[(Vec, Int)], Int) => Seq[Seq[Int]],
+                                   splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
                                    checkEvery: Int)
 
   /**
     * Starts the async computation of the weights
     *
     * @param initialWeights The initial weights
-    * @param stoppingCriterion A function receiving (initial loss, current loss) and outputting whether to stop the computation
+    * @param earlyStopping A function receiving (initial loss, current loss) and outputting whether to stop the computation
     * @param splitStrategy A function from (data, number workers) to a sequence of the assigned samples for each worker
     * @param checkEvery The number of gradient updates received by the master between loss checks
     *
@@ -206,19 +207,20 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
     */
   def run(initialWeights: Vec,
           maxSteps: Int,
-          stoppingCriterion: Seq[Number] => Boolean,
+          earlyStopping: EarlyStopping,
           batchSize: Int,
-          splitStrategy: (Array[(Vec, Int)], Int) => Seq[Seq[Int]],
+          splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
           checkEvery: Int = 100): Future[GradState] = {
     atomic { implicit txn =>
       if (masterGrpcImpl.gradState().end.isEmpty) {
         Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
       }
       else {
+        log.info("starting async computation")
         val weightsPromise = Promise[GradState]
         masterGrpcImpl.initState(
             initialWeights,
-            AsyncConfig(initialWeights, maxSteps, stoppingCriterion, batchSize, splitStrategy, checkEvery),
+            AsyncConfig(initialWeights, maxSteps, earlyStopping, batchSize, splitStrategy, checkEvery),
             weightsPromise)
 
         val workers = slaves.values
@@ -227,6 +229,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
         workers.zip(split).foreach {
           case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize))
         }
+        log.info("waiting for slaves updates")
         weightsPromise.future
       }
     }
@@ -234,21 +237,21 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
 
   class AsyncMasterGrpcImpl extends AbstractMasterGrpc {
 
-    private var promise: Promise[GradState] = _
-    private[AsyncMaster] val gradState      = Ref(GradState.empty)
-    private val losses                      = Ref(ArrayBuffer.empty[Number])
+    private[AsyncMaster] val gradState = Ref(GradState.empty)
+    private val losses                 = Ref(ArrayBuffer.empty[Number])
 
-    private var asyncConfig: AsyncConfig = _
+    private var promise: Promise[GradState] = _
+    private var asyncConfig: AsyncConfig    = _
 
     def initState(initialWeights: Vec, config: AsyncConfig, weightsPromise: Promise[GradState]): Unit = {
       atomic { implicit txn =>
-        gradState() = GradState(initialWeights)
+        gradState() = GradState.start(initialWeights)
         promise = weightsPromise
         asyncConfig = config
       }
     }
 
-    def endComputation: Unit = atomic { implicit txn =>
+    def endComputation(): Unit = atomic { implicit txn =>
       slaves.values.foreach(_.stopAsync(Empty()))
       losses.set(ArrayBuffer.empty[Number])
 
@@ -260,16 +263,21 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
         if (gradState().end.isEmpty) { //Not finished => a computation is running
           val newGradState = gradState.transformAndGet(_.update(request.gradUpdate))
 
+          log.trace(s"${newGradState.updates} updates received")
+
           if (newGradState.updates >= asyncConfig.maxSteps) {
-            endComputation
+            log.info("max number of steps reached: stopping computation")
+            endComputation()
           }
           else if (newGradState.updates % asyncConfig.checkEvery == 0) {
             computeLoss(newGradState.grad).onComplete {
               case Success(loss) =>
+                log.info(s"Steps: ${gradState().updates}, loss: $loss")
                 val newLosses = losses.transformAndGet(_ += loss)
 
                 if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
-                  endComputation
+                  log.info("converged to target: stopping computation")
+                  endComputation()
                 }
 
               case Failure(e) =>

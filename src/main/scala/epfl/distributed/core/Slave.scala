@@ -17,7 +17,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
   private val log                                  = Logger(s"slave--${pretty(node)}")
   private val server                               = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
-  private val masterChannel                        = newChannel(master.host, master.port)
+  private val masterStub                           = MasterGrpc.stub(newChannel(master.host, master.port))
   private val otherSlaves                          = TrieMap[Node, SlaveStub]()
 
   private val gamma = 1d / data.length
@@ -35,14 +35,12 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     log.info("started")
 
     // register slave node
-    val masterStub = MasterGrpc.blockingStub(masterChannel)
     masterStub.registerSlave(node)
     log.info("registered")
   }
 
   def stop(): Unit = {
     // register slave node
-    val masterStub = MasterGrpc.blockingStub(masterChannel)
     masterStub.unregisterSlave(node)
     log.info("unregistered")
 
@@ -72,11 +70,17 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         }) * gamma
 
         weights.transform(_ - gradUpdate)
-        otherSlaves.values.foreach(_.updateGrad(GradUpdate(gradUpdate)))
+
+        val gradUpdateRequest = GradUpdate(gradUpdate)
+        otherSlaves.values.foreach(_.updateGrad(gradUpdateRequest))
+        masterStub.updateGrad(gradUpdateRequest)
+
+        log.trace("update sent")
 
         true //Still running in async mode
       }
       else {
+        log.info("async computation stopped")
         false //The computation has stopped
       }
     }
@@ -135,6 +139,10 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         }
         else {
           runningAsync() = true
+
+          log.info(
+              s"initializing async computation. ${request.samples.size} samples assigned. Batch size: ${request.batchSize}")
+
           weights() = request.weights
           assignedSamples = request.samples
           batchSize = request.batchSize
@@ -148,12 +156,15 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     def updateGrad(request: GradUpdate): Future[Ack] = {
       require(async, "Cannot update gradient: slave is in synchronous mode.")
 
+      log.trace("update received")
+
       weights.single.transform(_ - request.gradUpdate)
       Future.successful(Ack())
     }
 
     def stopAsync(request: com.google.protobuf.empty.Empty): Future[Ack] = {
       require(async, "Cannot stop async computation: slave is in synchronous mode.")
+      log.debug("stopping async computation")
 
       runningAsync.single() = false
       Future.successful(Ack())

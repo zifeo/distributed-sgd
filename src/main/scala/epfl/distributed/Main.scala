@@ -4,7 +4,7 @@ import java.util.logging.LogManager
 
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.core.Node
-import epfl.distributed.core.ml.SparseSVM
+import epfl.distributed.core.ml.{EarlyStopping, SparseSVM}
 import epfl.distributed.core.{AsyncMaster, Master, Slave, SyncMaster}
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.{Config, Dataset, Pool}
@@ -62,8 +62,11 @@ object Main extends App {
         if (slaveCount == 3) {
           master match {
             case asyncMaster: AsyncMaster =>
-              //val w1 = asyncMaster.run(w0, 1e6.toInt, ???, 100, ???, ???).await //TODO specify stopping criterion
-              println("")
+              val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
+                data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
+              val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 100, splitStrategy).await
+              println(w1)
+
             case syncMaster: SyncMaster =>
               val epochs = 5
 
@@ -101,15 +104,26 @@ object Main extends App {
       master.start()
       slaves.foreach(_.start())
 
-      import Pool.AwaitableFuture
-      val epochs = 5
-
       val w0 = Vec.zeros(featuresCount)
-      println("Initial loss: " + master.computeLoss(w0).await)
 
-      val w1 = master.backward(epochs = epochs, weights = w0).await
+      import Pool.AwaitableFuture
 
-      println(s"End loss after $epochs epochs: " + master.computeLoss(w1).await)
+      master match {
+        case asyncMaster: AsyncMaster =>
+          val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
+            data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
+          val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 100, splitStrategy).await
+          println(w1)
+
+        case syncMaster: SyncMaster =>
+          val epochs = 5
+
+          println("Initial loss: " + syncMaster.computeLoss(w0).await)
+
+          val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
+
+          println(s"End loss after $epochs epochs: " + syncMaster.computeLoss(w1).await)
+      }
 
       slaves.foreach(_.stop())
       master.stop()
