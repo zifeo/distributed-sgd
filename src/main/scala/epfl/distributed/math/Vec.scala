@@ -25,19 +25,20 @@ trait Vec {
 
   def +(other: Vec): Vec = elementWiseOp(other, _ + _)
 
-  def +(scalar: Number): Vec = mapValues(_ + scalar)
+  def +(scalar: Number): Vec = if (scalar === Number.zero) this else mapValues(_ + scalar)
 
   def -(other: Vec): Vec = elementWiseOp(other, _ - _)
 
-  def -(scalar: Number): Vec = mapValues(_ - scalar)
+  def -(scalar: Number): Vec = if(scalar === Number.zero) this else mapValues(_ - scalar)
 
   def *(other: Vec): Vec = elementWiseOp(other, _ * _)
 
-  def *(scalar: Number): Vec = mapValues(_ * scalar)
+  def *(scalar: Number): Vec = if (scalar === Number.zero) this.zerosLike else mapValues(_ * scalar)
 
   def /(other: Vec): Vec = elementWiseOp(other, _ / _)
 
-  def /(scalar: Number): Vec = mapValues(_ / scalar)
+  def /(scalar: Number): Vec =
+    if (scalar === Number.zero) throw new IllegalArgumentException("Division by zero") else mapValues(_ / scalar)
 
   def **(scalar: Number): Vec = mapValues(_ ** scalar)
 
@@ -48,11 +49,7 @@ trait Vec {
   def normSquared: Number = foldLeft(Number.zero)(_ + _ ** 2)
   def norm: Number        = sqrt(normSquared)
 
-  def dot(other: Vec): Number = {
-    require(other.size == size, "Can't perform dot product of vectors of different length")
-
-    (this * other).sum
-  }
+  def dot(other: Vec): Number = (this * other).sum
 
   def zerosLike: Vec = this match {
     case _: Dense  => Dense.zeros(this.size)

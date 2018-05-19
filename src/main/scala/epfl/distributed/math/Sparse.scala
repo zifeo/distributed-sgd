@@ -4,12 +4,34 @@ import spire.math._
 
 class Sparse private (override val map: Map[Int, Number], val size: Int) extends Vec {
 
-  override def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
+  /**
+    *
+    * @param other
+    * @param op
+    * @param opZeroIfOneArgZero If the op returns 0 as long as one of its arguments is 0 (ex. the * op). If true, an
+    *                           optimization will by applied
+    * @return
+    */
+  def elementWiseOp(other: Vec, op: (Number, Number) => Number, opZeroIfOneArgZero: Boolean): Vec = {
     require(other.size == size, "Can't perform element-wise operation on vectors of different length")
 
     other match {
       case s: Sparse =>
-        Sparse((map.keySet ++ s.map.keySet).map(idx => idx -> op(map(idx), s.map(idx))).toMap, size)
+        if (opZeroIfOneArgZero) {
+          if (size < other.size) {
+            Sparse(map.map {
+              case (idx, value) => (idx, op(value, s.map(idx)))
+            }, size)
+          }
+          else {
+            Sparse(s.map.map {
+              case (idx, value) => (idx, op(map(idx), value))
+            }, size)
+          }
+        }
+        else {
+          Sparse((map.keySet ++ s.map.keySet).map(idx => idx -> op(map(idx), s.map(idx))).toMap, size)
+        }
 
       case Dense(otherValues) =>
         map.foldLeft(Dense(otherValues)) {
@@ -17,6 +39,11 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
         }
     }
   }
+
+  override def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec =
+    elementWiseOp(other, op, opZeroIfOneArgZero = false)
+
+  override def *(other: Vec): Vec = elementWiseOp(other, _ * _, opZeroIfOneArgZero = true)
 
   override def mapValues(op: Number => Number): Vec = {
     if (op(Number.zero) === Number.zero) {
