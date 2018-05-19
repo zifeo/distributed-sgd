@@ -5,7 +5,7 @@ import java.util.logging.LogManager
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.core.Node
 import epfl.distributed.core.ml.SparseSVM
-import epfl.distributed.core.{Master, Slave}
+import epfl.distributed.core.{AsyncMaster, Master, Slave, SyncMaster}
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.{Config, Dataset, Pool}
 import kamon.Kamon
@@ -48,7 +48,7 @@ object Main extends App {
     case (Some(masterHost), Some(masterPort)) if masterHost == node.host && masterPort == node.port =>
       log.info("master")
 
-      val master = new Master(node, data, async)
+      val master = Master.create(node, data, async)
       master.start()
 
       sys.addShutdownHook {
@@ -60,18 +60,18 @@ object Main extends App {
         val w0 = Vec.zeros(featuresCount)
 
         if (slaveCount == 3) {
-          if (async) {
-            val w1 = master.async(w0, 1e6.toInt, ???, 100, ???, ???).await //TODO specify stopping criterion
-            //println("")
-          }
-          else {
-            val epochs = 5
+          master match {
+            case asyncMaster: AsyncMaster =>
+              //val w1 = asyncMaster.run(w0, 1e6.toInt, ???, 100, ???, ???).await //TODO specify stopping criterion
+              println("")
+            case syncMaster: SyncMaster =>
+              val epochs = 5
 
-            println("Initial loss: " + master.computeLoss(w0).await)
+              println("Initial loss: " + syncMaster.computeLoss(w0).await)
 
-            val w1 = master.backward(epochs = epochs, weights = w0).await
+              val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
 
-            println(s"End loss after $epochs epochs: " + master.computeLoss(w1).await)
+              println(s"End loss after $epochs epochs: " + syncMaster.computeLoss(w1).await)
           }
         }
       }
@@ -95,7 +95,7 @@ object Main extends App {
       log.info("dev mode")
 
       val masterNode :: slaveNodes = (0 to 4).toList.map(i => Node(config.host, config.port + i))
-      val master                   = new Master(masterNode, data, async)
+      val master                   = Master.create(masterNode, data, async)
       val slaves                   = slaveNodes.map(n => new Slave(n, masterNode, data, model, async))
 
       master.start()
