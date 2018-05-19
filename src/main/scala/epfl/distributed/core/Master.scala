@@ -4,6 +4,7 @@ import com.google.protobuf.empty.Empty
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.core.SlaveGrpc.SlaveStub
 import epfl.distributed.core.core._
+import epfl.distributed.core.ml.GradState
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 import io.grpc.Server
@@ -208,13 +209,13 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
           stoppingCriterion: Seq[Number] => Boolean,
           batchSize: Int,
           splitStrategy: (Array[(Vec, Int)], Int) => Seq[Seq[Int]],
-          checkEvery: Int = 100): Future[Vec] = {
+          checkEvery: Int = 100): Future[GradState] = {
     atomic { implicit txn =>
-      if (masterGrpcImpl.asyncWeightsPromise().nonEmpty) {
+      if (masterGrpcImpl.gradState().end.isEmpty) {
         Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
       }
       else {
-        val weightsPromise = Promise[Vec]
+        val weightsPromise = Promise[GradState]
         masterGrpcImpl.initState(
             initialWeights,
             AsyncConfig(initialWeights, maxSteps, stoppingCriterion, batchSize, splitStrategy, checkEvery),
@@ -233,56 +234,55 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
 
   class AsyncMasterGrpcImpl extends AbstractMasterGrpc {
 
-    private[AsyncMaster] val asyncWeightsPromise = Ref(Option.empty[Promise[Vec]])
-    private val gradState                        = Ref(Vec.zeros(1))
-    private val asyncUpdatesCount                = Ref(0)
-    private val losses                           = Ref(ArrayBuffer.empty[Number])
+    private var promise: Promise[GradState] = _
+    private[AsyncMaster] val gradState      = Ref(GradState.empty)
+    private val losses                      = Ref(ArrayBuffer.empty[Number])
 
     private var asyncConfig: AsyncConfig = _
 
-    def initState(initialWeights: Vec, config: AsyncConfig, weightsPromise: Promise[Vec]): Unit = atomic {
-      implicit txn =>
-        gradState() = initialWeights
-        asyncWeightsPromise() = Some(weightsPromise)
+    def initState(initialWeights: Vec, config: AsyncConfig, weightsPromise: Promise[GradState]): Unit = {
+      atomic { implicit txn =>
+        gradState() = GradState(initialWeights)
+        promise = weightsPromise
         asyncConfig = config
+      }
     }
 
-    def endComputation(newGrad: Vec): Unit = atomic { implicit txn =>
+    def endComputation: Unit = atomic { implicit txn =>
       slaves.values.foreach(_.stopAsync(Empty()))
       losses.set(ArrayBuffer.empty[Number])
 
-      val weightsPromise = asyncWeightsPromise.getAndTransform(_ => None).get
-      weightsPromise.complete(Success(newGrad))
+      promise.complete(Success(gradState.transformAndGet(_.finish)))
     }
 
     def updateGrad(request: GradUpdate): Future[Ack] = {
       atomic { implicit txn =>
-        asyncWeightsPromise() match {
-          case Some(weightsPromise) => //There's a promise => a computation is running
-            val newGrad      = gradState.transformAndGet(_ - request.gradUpdate)
-            val updatesCount = asyncUpdatesCount.transformAndGet(_ + 1)
+        if (gradState().end.isEmpty) { //Not finished => a computation is running
+          val newGradState = gradState.transformAndGet(_.update(request.gradUpdate))
 
-            if (updatesCount >= asyncConfig.maxSteps) {
-              endComputation(newGrad)
+          if (newGradState.updates >= asyncConfig.maxSteps) {
+            endComputation
+          }
+          else if (newGradState.updates % asyncConfig.checkEvery == 0) {
+            computeLoss(newGradState.grad).onComplete {
+              case Success(loss) =>
+                val newLosses = losses.transformAndGet(_ += loss)
+
+                if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
+                  endComputation
+                }
+
+              case Failure(e) =>
+                log.error("Failed to compute loss: {}", e)
             }
-            else if (updatesCount % asyncConfig.checkEvery == 0) {
-              computeLoss(newGrad).onComplete {
-                case Success(loss) =>
-                  val newLosses = losses.transformAndGet(_ += loss)
+          }
 
-                  if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
-                    endComputation(newGrad)
-                  }
+          Future.successful(Ack())
+        }
+        else {
+          Future.failed(
+              new IllegalStateException("Master async computation stopped: won't accept any gradient updates"))
 
-                case Failure(e) =>
-                  log.error("Failed to compute loss: {}", e)
-              }
-            }
-
-            Future.successful(Ack())
-          case None =>
-            Future.failed(
-                new IllegalStateException("Master async computation stopped: won't accept any gradient updates"))
         }
 
       }
