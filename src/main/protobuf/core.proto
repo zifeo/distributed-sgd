@@ -6,7 +6,8 @@ import "scalapb/scalapb.proto";
 import "google/protobuf/empty.proto";
 
 option (scalapb.options) = {
-  import: "epfl.distributed.math.Vec.numberTypeMapper"
+  import: "epfl.distributed.core.numberTypeMapper"
+  import: "epfl.distributed.core.vecTypeMapper"
 };
 
 
