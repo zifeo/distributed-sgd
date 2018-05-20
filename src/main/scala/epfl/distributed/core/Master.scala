@@ -237,8 +237,8 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
 
   class AsyncMasterGrpcImpl extends AbstractMasterGrpc {
 
-    private[AsyncMaster] val gradState = Ref(GradState.empty)
-    private val losses                 = Ref(ArrayBuffer.empty[Number])
+    private val gradState = Ref(GradState.empty)
+    private val losses    = Ref(ArrayBuffer.empty[Number])
 
     private var promise: Promise[GradState] = _
     private var asyncConfig: AsyncConfig    = _

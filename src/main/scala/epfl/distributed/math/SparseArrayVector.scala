@@ -57,9 +57,9 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
       map.keys
     }
     else {
-      map.filter {
-        case (_, num) => abs(num) > epsilon
-      }.keys
+      map.collect {
+        case (idx, num) if abs(num) > epsilon => idx
+      }
     }
   }
 
