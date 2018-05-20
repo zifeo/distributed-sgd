@@ -65,9 +65,8 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
           Random.shuffle[Int, IndexedSeq](assignedSamples.indices) take batchSize map data
         }
 
-        val gradUpdate = Vec.sum(samples.map {
-          case (x, y) => model.backward(weights(), x, y)
-        }) * gamma
+        val grads      = samples.map { case (x, y) => model.backward(weights(), x, y) }
+        val gradUpdate = gamma * batchSize * Vec.sum(grads)
 
         weights.transform(_ - gradUpdate)
 
@@ -126,7 +125,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         }
         .reduce(_ + _)
 
-      GradientReply(grad * -step, receivedAt, System.currentTimeMillis())
+      GradientReply(-step * grad, receivedAt, System.currentTimeMillis())
     }
 
     def initAsync(request: AsyncInit): Future[Ack] = {

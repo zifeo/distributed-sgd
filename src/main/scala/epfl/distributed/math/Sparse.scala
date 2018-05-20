@@ -76,9 +76,9 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
       map.keys
     }
     else {
-      map.filter {
-        case (_, num) => abs(num) > epsilon
-      }.keys
+      map.collect {
+        case (idx, num) if abs(num) > epsilon => idx
+      }
     }
   }
 
@@ -124,7 +124,7 @@ object Sparse {
     Sparse(m.mapValues(num.toNumber), size)
   }
 
-  def zeros(size: Int): Sparse                             = Sparse(Map[Int, Number](), size)
+  def zeros(size: Int): Sparse                             = Sparse(Map.empty[Int, Number], size)
   def oneHot(value: Number, index: Int, size: Int): Sparse = Sparse(Map[Int, Number](index -> value), size)
 
 }

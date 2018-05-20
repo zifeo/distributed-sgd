@@ -69,13 +69,7 @@ object Dense {
 
   def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) =
     Dense(Gaussian(mean, stdDev).sample[Vector](size))
+
   def randE[N <: Number: Exponential](size: Int, rate: N) = Dense(Exponential(rate).sample[Vector](size))
-
-  implicit class RichNumber(val n: Number) extends AnyVal {
-
-    def *(vector: Vector[Number]): Vector[Number] = {
-      vector.map(_ * n)
-    }
-  }
 
 }

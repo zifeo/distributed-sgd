@@ -212,7 +212,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
           splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
           checkEvery: Int = 100): Future[GradState] = {
     atomic { implicit txn =>
-      if (masterGrpcImpl.gradState().end.isEmpty) {
+      if (masterGrpcImpl.running) {
         Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
       }
       else {
@@ -243,6 +243,8 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
     private var promise: Promise[GradState] = _
     private var asyncConfig: AsyncConfig    = _
 
+    @inline def running: Boolean = gradState.single().end.isEmpty
+
     def initState(initialWeights: Vec, config: AsyncConfig, weightsPromise: Promise[GradState]): Unit = {
       atomic { implicit txn =>
         gradState() = GradState.start(initialWeights)
@@ -260,7 +262,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
 
     def updateGrad(request: GradUpdate): Future[Ack] = {
       atomic { implicit txn =>
-        if (gradState().end.isEmpty) { //Not finished => a computation is running
+        if (running) {
           val newGradState = gradState.transformAndGet(_.update(request.gradUpdate))
 
           log.trace(s"${newGradState.updates} updates received")

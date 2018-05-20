@@ -29,7 +29,7 @@ trait Vec {
 
   def -(other: Vec): Vec = elementWiseOp(other, _ - _)
 
-  def -(scalar: Number): Vec = if(scalar === Number.zero) this else mapValues(_ - scalar)
+  def -(scalar: Number): Vec = if (scalar === Number.zero) this else mapValues(_ - scalar)
 
   def *(other: Vec): Vec = elementWiseOp(other, _ * _)
 
@@ -66,20 +66,35 @@ trait Vec {
 
 object Vec {
 
+  implicit class RichNumber(val n: Number) extends AnyVal {
+
+    def *(vec: Vec): Vec = {
+      vec * n
+    }
+  }
+  implicit class RichInt(val n: Int) extends AnyVal {
+
+    def *(vec: Vec): Vec = {
+      vec * n
+    }
+  }
+  implicit class RichDouble(val n: Double) extends AnyVal {
+
+    def *(vec: Vec): Vec = {
+      vec * n
+    }
+  }
+
   def apply(numbers: Number*): Dense          = Dense(numbers.toVector)
   def apply(numbers: Iterable[Number]): Dense = Dense(numbers.toVector)
 
-  def apply(size: Int, values: (Int, Number)*): Sparse   = Sparse(values.toMap, size)
-  def apply(values: Map[Int, Number], size: Int): Sparse = Sparse(values, size)
+  def apply(size: Int, values: (Int, Number)*): Sparse     = Sparse(values.toMap, size)
+  def apply(values: Map[Int, Number], size: Int): Sparse   = Sparse(values, size)
+  def apply[A: Numeric](m: Map[Int, A], size: Int): Sparse = Sparse(m, size)
 
-  def apply[A: Numeric](m: Map[Int, A], size: Int): Sparse = {
-    val num = implicitly[Numeric[A]]
-    Sparse(m.mapValues(num.toNumber), size)
-  }
-
-  def zeros(size: Int): Vec                 = Sparse.zeros(size)
-  def ones(size: Int): Vec                  = Dense.ones(size)
-  def fill(value: Number, size: Int): Dense = Dense.fill(value, size)
+  def zeros(size: Int): Vec               = Sparse.zeros(size)
+  def ones(size: Int): Vec                = Dense.ones(size)
+  def fill(value: Number, size: Int): Vec = Dense.fill(value, size)
 
   def oneHot(value: Number, index: Int, size: Int): Vec = {
     if (value === Number.zero) {
