@@ -18,7 +18,7 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
     other match {
       case s: Sparse =>
         if (opZeroIfOneArgZero) {
-          if (size < other.size) {
+          if (map.size < other.map.size) {
             Sparse(map.map {
               case (idx, value) => (idx, op(value, s.map(idx)))
             }, size)
