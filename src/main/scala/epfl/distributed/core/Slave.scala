@@ -35,19 +35,21 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     log.info("started")
 
     // register slave node
-    masterStub.registerSlave(node)
-    log.info("registered")
+    masterStub.registerSlave(node).onComplete { _ =>
+      log.info("registered")
+    }
   }
 
   def stop(): Unit = {
-    // register slave node
-    masterStub.unregisterSlave(node)
-    log.info("unregistered")
+    // unregister slave node
+    masterStub.unregisterSlave(node).onComplete { _ =>
+      log.info("unregistered")
 
-    server.shutdown()
-    server.awaitTermination()
-    ec.shutdown()
-    log.info("stopped")
+      server.shutdown()
+      server.awaitTermination()
+      ec.shutdown()
+      log.info("stopped")
+    }
   }
 
   def awaitTermination(): Unit = {

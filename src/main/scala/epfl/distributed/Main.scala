@@ -103,6 +103,7 @@ object Main extends App {
 
       master.start()
       slaves.foreach(_.start())
+      Thread.sleep(2000) // ensure both slaves and master are launched in dev mode
 
       val w0 = Vec.zeros(featuresCount)
 
