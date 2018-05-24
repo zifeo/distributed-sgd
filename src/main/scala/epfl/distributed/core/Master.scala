@@ -75,16 +75,6 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)]) {
           itWeights.flatMap(w => apply(w, it))
       }
 
-    /*
-      Need to improve:
-      - data idx attributions per node
-      - randomness of idx between epochs
-      - cleaner encoding/decoding between vec implement and grpc message data
-      - stepsize
-
-      How can this fit into the async mode?
-     */
-
     log.info(s"dsgd start")
 
     val init             = weights

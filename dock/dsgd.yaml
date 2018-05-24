@@ -48,6 +48,8 @@ spec:
               fieldPath: status.podIP
         - name: DSGD_MASTER_PORT
           value: "4000"
+        - name: DSGD_FULL
+          value: "false"
         - name: DSGD_ASYNC
           value: "false"
         - name: DSGD_RECORD
@@ -115,6 +117,8 @@ spec:
           value: "dsgd-master"
         - name: DSGD_MASTER_PORT
           value: "4000"
+        - name: DSGD_FULL
+          value: "false"
         - name: DSGD_ASYNC
           value: "false"
         - name: DSGD_RECORD

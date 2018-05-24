@@ -44,11 +44,12 @@ object Main extends App {
     Kamon.addReporter(new InfluxDBReporter())
   }
 
+  log.info("loading data in: {}", config.dataPath)
   val featuresCount = 47236
-
-  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, full = false).map {
+  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, full = config.full).map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
+  log.info("data loaded: {}", data.length)
 
   (config.masterHost, config.masterPort) match {
 
