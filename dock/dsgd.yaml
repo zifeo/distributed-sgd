@@ -55,6 +55,10 @@ spec:
         - name: DSGD_DATA_PATH
           value: "/opt/mnt/datasets"
         imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "4"
+            memory: "16Gi"
       restartPolicy: Always
       imagePullSecrets:
         - name: hub-private

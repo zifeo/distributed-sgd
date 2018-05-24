@@ -24,15 +24,12 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)]) {
 
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
 
-  //Without the lazy, we get an initialized field exception
+  // without the lazy, we get an initialized field exception
   private lazy val server: Server = newServer(MasterGrpc.bindService(masterGrpcImpl, ec), node.port)
+  private val slaveJoinCallbacks  = mutable.ListBuffer.empty[Int => Unit]
 
-  protected val log = Logger(s"master-${pretty(node)}")
-
+  protected val log    = Logger(s"master-${pretty(node)}")
   protected val slaves = TrieMap[Node, SlaveStub]()
-
-  // need to change this
-  private val slaveJoinCallbacks = mutable.ListBuffer.empty[Int => Unit]
 
   def start(): Unit = {
     require(!ec.isShutdown)

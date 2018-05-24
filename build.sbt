@@ -48,10 +48,11 @@ scalacOptions in Test --= List(
     "-Ywarn-value-discard",
     "-Ywarn-unused:privates"
 )
-scalacOptions in (Compile, console) --= Seq(
+scalacOptions in (Compile, console) --= List(
     "-Ywarn-unused:imports",
     "-Xfatal-warnings"
 )
+javaOptions ++= List("-Xms10G", "-Xmx12G")
 
 resolvers += Resolver.sonatypeRepo("releases")
 libraryDependencies ++= List(
@@ -64,8 +65,6 @@ libraryDependencies ++= List(
     "com.github.pureconfig"      %% "pureconfig"           % "0.9.1",
     "org.typelevel"              %% "spire"                % "0.15.0",
     "com.typesafe.scala-logging" %% "scala-logging"        % "3.9.0",
-    "com.nrinaudo"               %% "kantan.csv"           % "0.4.0",
-    "com.github.pathikrit"       %% "better-files"         % "3.4.0",
     "org.scala-stm"              %% "scala-stm"            % "0.8",
     "org.scalatest"              %% "scalatest"            % "3.0.5" % "test",
     "com.storm-enroute"          %% "scalameter"           % "0.9" % "test",

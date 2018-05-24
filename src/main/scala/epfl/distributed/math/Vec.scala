@@ -106,14 +106,14 @@ object Vec {
   }
 
   def sum(vecs: Iterable[Vec]): Vec = {
-    require(vecs.nonEmpty, "Can't sum an empty list of vectors")
+    require(vecs.nonEmpty, "Cannot sum an empty list of vectors")
     vecs.reduce(_ + _)
   }
 
   def mean(vecs: Iterable[Vec]): Vec = sum(vecs) / vecs.size
 
   def randU[N <: Number: Uniform](size: Int, min: N, max: N): Dense                = Dense.randU(size, min, max)
-  def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d): Dense = Dense.randG(size, mean, stdDev)
   def randE[N <: Number: Exponential](size: Int, rate: N): Dense                   = Dense.randE(size, rate)
+  def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d): Dense = Dense.randG(size, mean, stdDev)
 
 }

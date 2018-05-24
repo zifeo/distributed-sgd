@@ -17,17 +17,24 @@ object Main extends App {
   LogManager.getLogManager.readConfiguration()
   val log = Logger(s"bootstrap")
 
+  // settings
   val config = pureconfig.loadConfigOrThrow[Config]("dsgd")
-  log.info("{}", config)
-  log.info("cpu: {}", Runtime.getRuntime.availableProcessors())
-  log.info("mem: {}G", Runtime.getRuntime.maxMemory() / 1e9)
+  log.info("config loaded: {}", config)
+
+  {
+    // host information
+    val cores  = Runtime.getRuntime.availableProcessors()
+    val memory = Runtime.getRuntime.maxMemory()
+    log.info("cores: {}", cores)
+    log.info("mem: {}G", if (memory != Long.MaxValue) memory / 1e9 else -1)
+  }
 
   // current node (see application.conf, can be set using env vars)
   val node = Node(config.host, config.port)
-  log.info("{}", node)
+  log.info("node: {}:{}", node.host, node.port)
 
-  val async = config.async // TODO : refactor into a strategy either sync or async
-  log.info(if (config.async) "async" else "sync")
+  import config.async
+  log.info("compute: {}", if (async) "async" else "sync")
 
   // could use another model
   val model = new SparseSVM(0)
@@ -39,7 +46,7 @@ object Main extends App {
 
   val featuresCount = 47236
 
-  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, 100).map {
+  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, full = false).map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
 

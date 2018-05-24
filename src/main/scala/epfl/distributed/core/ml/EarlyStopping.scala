@@ -3,6 +3,7 @@ package epfl.distributed.core.ml
 import spire.math.Number
 
 object EarlyStopping {
+
   type EarlyStopping = Seq[Number] => Boolean
 
   implicit val numberOrder: Ordering[Number] = (x: Number, y: Number) => x compare y
@@ -13,7 +14,7 @@ object EarlyStopping {
     losses: Seq[Number] =>
       {
         def check: Boolean = {
-          val (min, indexMin) = losses.zipWithIndex.minBy(_._1)
+          val (_, indexMin) = losses.zipWithIndex.minBy(_._1)
 
           if (indexMin == losses.size) {
             //The min is the last => still improving

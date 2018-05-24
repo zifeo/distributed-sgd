@@ -1,62 +1,54 @@
 package epfl.distributed.utils
 
-import better.files.File
-import epfl.distributed.Main
-import kantan.codecs.resource.ResourceIterator
-import kantan.csv._
-import kantan.csv.ops._
 import spire.math.Number
+
+import scala.io.Source
 
 object Dataset {
 
   // CCAT transform to -1 or 1
-  def rcv1(folder: String, entries: Option[Int] = None): Array[(Map[Int, Number], Int)] = {
-    // not that safe
+  def rcv1(folder: String, full: Boolean = true, chunk: Int = 4096): Array[(Map[Int, Number], Int)] = {
 
-    val dataFiles   = (0 to 3).map(d => s"lyrl2004_vectors_test_pt$d.dat") :+ "lyrl2004_vectors_train.dat"
-    val targetsFile = "rcv1-v2.topics.qrels"
-
-    def dataReader(filename: String): CsvReader[ReadResult[Vector[String]]] = {
-      val url = File(s"$folder/$filename").url
-      url.asCsvReader[Vector[String]](rfc.withCellSeparator(' '))
-    }
-
-    val targets = dataReader(targetsFile)
-      .map { line =>
-        line.map { cells =>
-          val Vector(cat, did, _) = cells
-          val label               = if (cat == "CCAT") 1 else -1
-          did -> label
-        }.toOption
-
+    def readData(path: String, chunk: Int): Iterator[(Int, Map[Int, Number])] =
+      for {
+        lines <- Source.fromFile(path).getLines.grouped(chunk)
+        line  <- lines.par
+      } yield {
+        val parts = line.split(' ')
+        val rowID = parts(0).toInt
+        val vec = parts
+          .drop(2)
+          .map { row =>
+            val elems = row.split(':')
+            elems(0).toInt -> Number(elems(1).toDouble)
+          }
+          .toMap
+        (rowID, vec)
       }
-      .flatten
-      .toMap
 
-    val data =
-      ResourceIterator(dataFiles: _*)
-        .flatMap(dataReader)
-        .map { line =>
-          line.map { cells =>
-            val did    = cells.head
-            val values = cells.tail
+    def readLabels(path: String, chunk: Int): Iterator[(Int, Int)] =
+      for {
+        lines <- Source.fromFile(path).getLines.grouped(chunk)
+        line  <- lines.par
+      } yield {
+        val parts      = line.split(' ')
+        val classLabel = parts(0)
+        val rowID      = parts(1)
+        (rowID.toInt, if (classLabel == "CCAT") 1 else -1)
+      }
 
-            val weights = values
-              .filter(_.nonEmpty)
-              .map { value =>
-                val Array(idx, weight) = value.split(':')
-                idx.toInt -> Number(weight)
-              }
-              .toMap
+    val dataFiles = s"$folder/lyrl2004_vectors_train.dat" +: (if (full)
+                                                                (0 to 3).map(d =>
+                                                                  s"$folder/lyrl2004_vectors_test_pt$d.dat")
+                                                              else List.empty)
+    val targetsFile = s"$folder/rcv1-v2.topics.qrels"
 
-            weights -> targets(did)
-          }.toOption
-        }
-        .flatten
+    val labels = readLabels(targetsFile, chunk).toMap
 
-    entries.fold(data.toArray)(data.take(_).toArray)
+    for {
+      rows <- dataFiles.map(f => readData(f, chunk)).toArray
+      row  <- rows
+    } yield (row._2, labels(row._1))
   }
-
-  def rcv1(folder: String, entries: Int): Array[(Map[Int, Number], Int)] = rcv1(folder, Some(entries))
 
 }

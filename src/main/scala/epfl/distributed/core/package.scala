@@ -8,7 +8,7 @@ import spire.math.Number
 
 package object core {
 
-  implicit val numberTypeMapper = TypeMapper[Double, Number](Number(_))(_.toDouble)
+  implicit val numberTypeMapper: TypeMapper[Double, Number] = TypeMapper[Double, Number](Number.apply)(_.toDouble)
   implicit val vecTypeMapper: TypeMapper[Sparse, Vec] =
     TypeMapper[Sparse, Vec](sparse => Vec(sparse.map, sparse.size))(vec => Sparse(vec.map, vec.size))
 

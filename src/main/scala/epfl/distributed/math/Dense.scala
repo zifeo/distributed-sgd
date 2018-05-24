@@ -56,20 +56,17 @@ case class Dense(override val values: IndexedSeq[Number]) extends Vec {
 
 object Dense {
 
-  def apply(numbers: Number*): Dense = Dense(numbers.toVector)
-
-  def zeros(size: Int): Dense                             = Dense(Vector.fill(size)(Number.zero))
-  def ones(size: Int): Dense                              = Dense(Vector.fill(size)(Number.one))
-  def fill(value: Number, size: Int): Dense               = Dense(Vector.fill(size)(value))
-  def oneHot(value: Number, index: Int, size: Int): Dense = Dense(Vector.fill(size)(Number.zero).updated(index, value))
-
   implicit private[this] val rng: Cmwc5 = Cmwc5()
 
+  def apply(numbers: Number*): Dense                         = Dense(numbers.toVector)
+  def zeros(size: Int): Dense                                = Dense(Vector.fill(size)(Number.zero))
+  def ones(size: Int): Dense                                 = Dense(Vector.fill(size)(Number.one))
+  def fill(value: Number, size: Int): Dense                  = Dense(Vector.fill(size)(value))
+  def oneHot(value: Number, index: Int, size: Int): Dense    = Dense(Vector.fill(size)(Number.zero).updated(index, value))
   def randU[N <: Number: Uniform](size: Int, min: N, max: N) = Dense(Uniform(min, max).sample[Vector](size))
+  def randE[N <: Number: Exponential](size: Int, rate: N)    = Dense(Exponential(rate).sample[Vector](size))
 
   def randG[N <: Number: Gaussian](size: Int, mean: N = 0d, stdDev: N = 1d) =
     Dense(Gaussian(mean, stdDev).sample[Vector](size))
-
-  def randE[N <: Number: Exponential](size: Int, rate: N) = Dense(Exponential(rate).sample[Vector](size))
 
 }
