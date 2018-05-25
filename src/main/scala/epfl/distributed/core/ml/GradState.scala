@@ -6,6 +6,8 @@ case class GradState(grad: Vec, start: Long, updates: Long, end: Option[Long]) {
 
   def update(gradUpdate: Vec): GradState = copy(grad = grad - gradUpdate, updates = updates + 1)
 
+  def replaceGrad(grad: Vec): GradState = copy(grad = grad)
+
   def finish: GradState = copy(end = Some(System.currentTimeMillis()))
 }
 

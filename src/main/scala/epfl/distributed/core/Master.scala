@@ -121,7 +121,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
     result
   }
 
-  def computeFullLoss(weights: Vec): Future[Number] = {
+  def computeLossDistributed(weights: Vec): Future[Number] = {
     forward(weights)
       .map(
           _.zip(data)
@@ -129,15 +129,27 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
             .reduce(_ + _) / data.length)
   }
 
-  def computeSampledLoss(weights: Vec, samplesCount: Int = 1000): Number = {
-    (0 to samplesCount)
-      .map(_ => data(Random.nextInt(data.length)))
-      .map {
-        case (x, y) =>
-          (model(weights, x) - y) ** 2
-      }
-      .reduce(_ + _) / samplesCount
+  def computeLoss(weights: Vec, samplesCount: Option[Int] = None): Number = {
+    samplesCount match {
+      case Some(count) =>
+        (1 to count)
+          .map { _ =>
+            val (x, y) = data(Random.nextInt(data.length))
+            (model(weights, x) - y) ** 2
+          }
+          .reduce(_ + _) / count
+
+      case None =>
+        data
+          .map {
+            case (x, y) =>
+              (model(weights, x) - y) ** 2
+          }
+          .reduce(_ + _) / data.length
+    }
   }
+
+  def computeLoss(weights: Vec, samplesCount: Int): Number = computeLoss(weights, Some(samplesCount))
 
   abstract class AbstractMasterGrpc extends MasterGrpc.Master {
 
@@ -209,7 +221,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
           earlyStopping: EarlyStopping,
           batchSize: Int,
           splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
-          checkEvery: Int = 100): Future[GradState] = {
+          checkEvery: Int = 200): Future[GradState] = {
     atomic { implicit txn =>
       if (masterGrpcImpl.running) {
         Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
@@ -239,66 +251,76 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
     private val gradState = Ref(GradState.empty)
     private val losses    = Ref(ArrayBuffer.empty[Number])
 
+    private val bestGrad = Ref(Vec.zeros(1))
+    private val bestLoss = Ref(Number(Double.MaxValue))
+
     private var promise: Promise[GradState] = _
     private var asyncConfig: AsyncConfig    = _
 
     @inline def running: Boolean = gradState.single().end.isEmpty
 
     def initState(initialWeights: Vec, config: AsyncConfig, weightsPromise: Promise[GradState]): Unit = {
-      atomic { implicit txn =>
-        gradState() = GradState.start(initialWeights)
-        promise = weightsPromise
-        asyncConfig = config
-      }
+      gradState.single() = GradState.start(initialWeights)
+      promise = weightsPromise
+      asyncConfig = config
     }
 
     def endComputation(): Unit = atomic { implicit txn =>
       slaves.values.foreach(_.stopAsync(Empty()))
       losses.set(ArrayBuffer.empty[Number])
 
-      promise.complete(Success(gradState.transformAndGet(_.finish)))
+      promise.complete(Success(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish)))
+      log.info("Async computation ended. Final loss: " + bestLoss())
     }
 
     def updateGrad(request: GradUpdate): Future[Ack] = {
-      atomic { implicit txn =>
-        if (running) {
-          val newGradState = gradState.transformAndGet(_.update(request.gradUpdate))
+      if (running) {
+        val newGradState = gradState.single.transformAndGet(_.update(request.gradUpdate))
 
-          log.trace(s"${newGradState.updates} updates received")
+        log.trace(s"${newGradState.updates} updates received")
 
-          if (newGradState.updates >= asyncConfig.maxSteps) {
-            log.info("max number of steps reached: stopping computation")
-            endComputation()
-          }
-          else if (newGradState.updates % asyncConfig.checkEvery == 0) {
+        if (newGradState.updates >= asyncConfig.maxSteps) {
+          log.info("max number of steps reached: stopping computation")
+          endComputation()
+        }
+        else if (newGradState.updates % asyncConfig.checkEvery == 0) {
 
-            val loss = computeSampledLoss(newGradState.grad)
+          val loss = computeLoss(newGradState.grad, 5000)
+
+          val newLosses = atomic { implicit txn =>
+            //For early stopping: set best loss and related gradient
+            val isBestLoss = bestLoss.transformIfDefined {
+              case oldLoss if oldLoss > loss => loss
+            }
+            if (isBestLoss) {
+              bestGrad.set(newGradState.grad)
+            }
 
             /*computeFullLoss(newGradState.grad).onComplete {
               case Success(loss) =>*/
-            log.info(s"Steps: ${gradState().updates}, loss: $loss")
-            val newLosses = losses.transformAndGet(_ += loss)
+            log.info(s"Steps: ${newGradState.updates}, loss: $loss")
+            losses.transformAndGet(_ += loss)
+          }
 
-            if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
-              log.info("converged to target: stopping computation")
-              endComputation()
-            }
-            /*
+          if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
+            log.info("converged to target: stopping computation")
+            endComputation()
+          }
+          /*
               case Failure(e) =>
                 log.error("Failed to compute loss", e)
             }
-           */
-          }
-
-          Future.successful(Ack())
-        }
-        else {
-          Future.failed(
-              new IllegalStateException("Master async computation stopped: won't accept any gradient updates"))
-
+         */
         }
 
+        Future.successful(Ack())
       }
+      else {
+        log.debug("Received gradient update after computation ended")
+        Future.successful(Ack())
+        //Future.failed(new IllegalStateException("Master async computation stopped: won't accept any gradient updates"))
+      }
+
     }
   }
 }

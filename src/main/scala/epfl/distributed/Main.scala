@@ -73,17 +73,17 @@ object Main extends App {
             case asyncMaster: AsyncMaster =>
               val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
                 data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
-              val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 100, splitStrategy).await
+              val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 500, splitStrategy).await
               println(w1)
 
             case syncMaster: SyncMaster =>
               val epochs = 5
 
-              println("Initial loss: " + syncMaster.computeFullLoss(w0).await)
+              println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
 
               val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
 
-              println(s"End loss after $epochs epochs: " + syncMaster.computeFullLoss(w1).await)
+              println(s"End loss after $epochs epochs: " + syncMaster.computeLossDistributed(w1).await)
           }
         }
       }
@@ -123,17 +123,18 @@ object Main extends App {
           val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
             data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
 
-          val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 100, splitStrategy).await
+          val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 500, splitStrategy).await
           println(w1)
+          println(asyncMaster.computeLoss(w1.grad, 5000))
 
         case syncMaster: SyncMaster =>
           val epochs = 5
 
-          println("Initial loss: " + syncMaster.computeFullLoss(w0).await)
+          println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
 
           val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
 
-          println(s"End loss after $epochs epochs: " + syncMaster.computeFullLoss(w1).await)
+          println(s"End loss after $epochs epochs: " + syncMaster.computeLossDistributed(w1).await)
       }
 
       slaves.foreach(_.stop())

@@ -10,7 +10,7 @@ object EarlyStopping {
 
   def target(target: Number): EarlyStopping = (losses: Seq[Number]) => losses.last <= target
 
-  def noImprovement(patience: Int = 1, minDelta: Number = 1e-3, minSteps: Option[Int] = None): EarlyStopping = {
+  def noImprovement(patience: Int = 5, minDelta: Number = 1e-3, minSteps: Option[Int] = None): EarlyStopping = {
     losses: Seq[Number] =>
       {
         def check: Boolean = {
@@ -21,7 +21,7 @@ object EarlyStopping {
             false
           }
           else {
-            //The min is not the last => heck if we have been enough patient
+            //The min is not the last => check if we have been enough patient
             losses.size - indexMin - 1 >= patience
           }
         }
