@@ -2,15 +2,17 @@ package epfl.distributed.core
 
 import com.google.protobuf.empty.Empty
 import com.typesafe.scalalogging.Logger
+import epfl.distributed.Main.model
 import epfl.distributed.core.core.SlaveGrpc.SlaveStub
 import epfl.distributed.core.core._
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
-import epfl.distributed.core.ml.GradState
+import epfl.distributed.core.ml.{GradState, SparseSVM}
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 import io.grpc.Server
 import spire.math.Number
 
+import scala.util.Random
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -18,7 +20,7 @@ import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContextExecutorService, Future, Promise}
 import scala.util.{Failure, Success}
 
-abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)]) {
+abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) {
 
   protected val masterGrpcImpl: AbstractMasterGrpc
 
@@ -119,12 +121,22 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)]) {
     result
   }
 
-  def computeLoss(weights: Vec): Future[Number] = {
+  def computeFullLoss(weights: Vec): Future[Number] = {
     forward(weights)
       .map(
           _.zip(data)
             .map { case (p, (_, y)) => (p - y) ** 2 }
             .reduce(_ + _) / data.length)
+  }
+
+  def computeSampledLoss(weights: Vec, samplesCount: Int = 1000): Number = {
+    (0 to samplesCount)
+      .map(_ => data(Random.nextInt(data.length)))
+      .map {
+        case (x, y) =>
+          (model(weights, x) - y) ** 2
+      }
+      .reduce(_ + _) / samplesCount
   }
 
   abstract class AbstractMasterGrpc extends MasterGrpc.Master {
@@ -160,7 +172,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)]) {
   }
 }
 
-class SyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(node, data) {
+class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends AbstractMaster(node, data, model) {
 
   override protected val masterGrpcImpl = new SyncMasterGrpcImpl
 
@@ -171,7 +183,7 @@ class SyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(nod
   }
 }
 
-class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(node, data) {
+class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends AbstractMaster(node, data, model) {
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
 
@@ -259,19 +271,23 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
             endComputation()
           }
           else if (newGradState.updates % asyncConfig.checkEvery == 0) {
-            computeLoss(newGradState.grad).onComplete {
-              case Success(loss) =>
-                log.info(s"Steps: ${gradState().updates}, loss: $loss")
-                val newLosses = losses.transformAndGet(_ += loss)
 
-                if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
-                  log.info("converged to target: stopping computation")
-                  endComputation()
-                }
+            val loss = computeSampledLoss(newGradState.grad)
 
-              case Failure(e) =>
-                log.error("Failed to compute loss: {}", e)
+            /*computeFullLoss(newGradState.grad).onComplete {
+              case Success(loss) =>*/
+            log.info(s"Steps: ${gradState().updates}, loss: $loss")
+            val newLosses = losses.transformAndGet(_ += loss)
+
+            if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
+              log.info("converged to target: stopping computation")
+              endComputation()
             }
+            /*
+              case Failure(e) =>
+                log.error("Failed to compute loss", e)
+            }
+           */
           }
 
           Future.successful(Ack())
@@ -289,16 +305,16 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)]) extends AbstractMaster(no
 
 object Master {
 
-  def sync(node: Node, data: Array[(Vec, Int)]): SyncMaster = new SyncMaster(node, data)
+  def sync(node: Node, data: Array[(Vec, Int)], model: SparseSVM): SyncMaster = new SyncMaster(node, data, model)
 
-  def async(node: Node, data: Array[(Vec, Int)]): AsyncMaster = new AsyncMaster(node, data)
+  def async(node: Node, data: Array[(Vec, Int)], model: SparseSVM): AsyncMaster = new AsyncMaster(node, data, model)
 
-  def create(node: Node, data: Array[(Vec, Int)], async: Boolean): AbstractMaster = {
+  def create(node: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean): AbstractMaster = {
     if (async) {
-      new AsyncMaster(node, data)
+      new AsyncMaster(node, data, model)
     }
     else {
-      new SyncMaster(node, data)
+      new SyncMaster(node, data, model)
     }
   }
 

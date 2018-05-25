@@ -46,6 +46,7 @@ object Main extends App {
 
   log.info("loading data in: {}", config.dataPath)
   val featuresCount = 47236
+
   val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, full = config.full).map {
     case (x, y) => Vec(x, featuresCount) -> y
   }
@@ -56,7 +57,7 @@ object Main extends App {
     case (Some(masterHost), Some(masterPort)) if masterHost == node.host && masterPort == node.port =>
       log.info("master")
 
-      val master = Master.create(node, data, async)
+      val master = Master.create(node, data, model, async)
       master.start()
 
       sys.addShutdownHook {
@@ -78,11 +79,11 @@ object Main extends App {
             case syncMaster: SyncMaster =>
               val epochs = 5
 
-              println("Initial loss: " + syncMaster.computeLoss(w0).await)
+              println("Initial loss: " + syncMaster.computeFullLoss(w0).await)
 
               val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
 
-              println(s"End loss after $epochs epochs: " + syncMaster.computeLoss(w1).await)
+              println(s"End loss after $epochs epochs: " + syncMaster.computeFullLoss(w1).await)
           }
         }
       }
@@ -106,7 +107,7 @@ object Main extends App {
       log.info("dev mode")
 
       val masterNode :: slaveNodes = (0 to 4).toList.map(i => Node(config.host, config.port + i))
-      val master                   = Master.create(masterNode, data, async)
+      val master                   = Master.create(masterNode, data, model, async)
       val slaves                   = slaveNodes.map(n => new Slave(n, masterNode, data, model, async))
 
       master.start()
@@ -121,17 +122,18 @@ object Main extends App {
         case asyncMaster: AsyncMaster =>
           val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
             data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
+
           val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 100, splitStrategy).await
           println(w1)
 
         case syncMaster: SyncMaster =>
           val epochs = 5
 
-          println("Initial loss: " + syncMaster.computeLoss(w0).await)
+          println("Initial loss: " + syncMaster.computeFullLoss(w0).await)
 
           val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
 
-          println(s"End loss after $epochs epochs: " + syncMaster.computeLoss(w1).await)
+          println(s"End loss after $epochs epochs: " + syncMaster.computeFullLoss(w1).await)
       }
 
       slaves.foreach(_.stop())
