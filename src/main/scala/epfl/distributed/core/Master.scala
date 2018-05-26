@@ -2,23 +2,21 @@ package epfl.distributed.core
 
 import com.google.protobuf.empty.Empty
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.Main.model
 import epfl.distributed.core.core.SlaveGrpc.SlaveStub
 import epfl.distributed.core.core._
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
-import epfl.distributed.core.ml.{GradState, SparseSVM}
+import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 import io.grpc.Server
 import spire.math.Number
 
-import scala.util.Random
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContextExecutorService, Future, Promise}
-import scala.util.{Failure, Success}
+import scala.util.{Random, Success}
 
 abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) {
 
@@ -69,7 +67,10 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
     Future.sequence(work).map(_.flatMap(_.predictions))
   }
 
-  def backward(epochs: Int, batchSize: Int = 1, weights: Vec): Future[Vec] = {
+  def backward(epochs: Int,
+               batchSize: Int = 100,
+               initialWeights: Vec,
+               stoppingCriterion: EarlyStopping = EarlyStopping.noImprovement()): Future[GradState] = {
 
     def loop[T](on: Seq[T])(init: Vec)(apply: (Vec, T) => Future[Vec]): Future[Vec] =
       on.foldLeft(Future.successful(init)) {
@@ -79,17 +80,24 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
 
     log.info(s"dsgd start")
 
-    val init             = weights
     val workersWithIndex = slaves.values.zipWithIndex
     val piece            = Math.floorDiv(data.length, workersWithIndex.size)
 
-    val result = loop(1 to epochs)(init) { // epoch
-      case (epochWeight, epoch) =>
-        log.info(s"epoch $epoch")
+    def loopEpoch(epoch: Int, epochWeight: GradState, losses: List[Number]): Future[GradState] = {
+      losses.headOption.foreach(loss => log.info(s"Loss after epoch ${epoch - 1}: $loss"))
 
-        loop(0 until piece by batchSize)(epochWeight) { // batch
+      if(epoch >= epochs){
+        log.info("Reached max number of epochs: stopping computation")
+        Future.successful(epochWeight.finish(losses.head))
+      }
+      else if (stoppingCriterion(losses)) {
+        log.info("Converged to target: stopping computation")
+        Future.successful(epochWeight.finish(losses.head))
+      }
+      else {
+        val futureEpochWeight = loop(0 until piece by batchSize)(epochWeight.grad) { // batch
           case (batchWeights, batch) =>
-            log.debug(s"step ${batch + 1} / $piece")
+            log.debug(s"samples ${batch + 1} - ${Math.min(batch + batchSize, piece)} / $piece")
 
             val work = workersWithIndex.map {
               case (worker, i) =>
@@ -114,8 +122,16 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
               }
         }
 
+        for {
+          newEpochWeight <- futureEpochWeight
+          loss           <- computeLossDistributed(newEpochWeight)
+          newGrad        <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses)
+        } yield newGrad
+      }
     }
-    log.debug("Work done, waiting result")
+
+    val result = loopEpoch(1, GradState.start(initialWeights), Nil)
+    //log.debug("Work done, waiting result")
 
     result.foreach(_ => log.info(s"dsgd end"))
     result
@@ -269,7 +285,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
       slaves.values.foreach(_.stopAsync(Empty()))
       losses.set(ArrayBuffer.empty[Number])
 
-      promise.complete(Success(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish)))
+      promise.complete(Success(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish(bestLoss()))))
       log.info("Async computation ended. Final loss: " + bestLoss())
     }
 

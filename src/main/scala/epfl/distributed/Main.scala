@@ -77,13 +77,11 @@ object Main extends App {
               println(w1)
 
             case syncMaster: SyncMaster =>
-              val epochs = 5
-
               println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
 
-              val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
+              val w1 = syncMaster.backward(epochs = 100, initialWeights = w0).await
 
-              println(s"End loss after $epochs epochs: " + syncMaster.computeLossDistributed(w1).await)
+              println(s"End loss after ${w1.updates} epochs: " + w1.loss.get)
           }
         }
       }
@@ -128,13 +126,11 @@ object Main extends App {
           println(asyncMaster.computeLoss(w1.grad, 5000))
 
         case syncMaster: SyncMaster =>
-          val epochs = 5
-
           println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
 
-          val w1 = syncMaster.backward(epochs = epochs, weights = w0).await
+          val w1 = syncMaster.backward(epochs = 100, initialWeights = w0).await
 
-          println(s"End loss after $epochs epochs: " + syncMaster.computeLossDistributed(w1).await)
+          println(s"End loss after ${w1.updates} epochs: " + w1.loss.get)
       }
 
       slaves.foreach(_.stop())

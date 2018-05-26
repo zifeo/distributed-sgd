@@ -8,7 +8,7 @@ object EarlyStopping {
 
   implicit val numberOrder: Ordering[Number] = (x: Number, y: Number) => x compare y
 
-  def target(target: Number): EarlyStopping = (losses: Seq[Number]) => losses.last <= target
+  def target(target: Number): EarlyStopping = (losses: Seq[Number]) => losses.lastOption.fold(false)(_ <= target)
 
   def noImprovement(patience: Int = 5, minDelta: Number = 1e-3, minSteps: Option[Int] = None): EarlyStopping = {
     losses: Seq[Number] =>
@@ -26,7 +26,7 @@ object EarlyStopping {
           }
         }
 
-        minSteps.fold(check)(steps => if (steps < losses.size) false else check)
+        losses.nonEmpty && minSteps.fold(check)(steps => if (steps < losses.size) false else check)
       }
   }
 
