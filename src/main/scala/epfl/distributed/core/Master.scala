@@ -9,11 +9,12 @@ import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 import io.grpc.Server
+import monix.eval.Task
 import spire.math.Number
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContextExecutorService, Future, Promise}
 import scala.util.{Random, Success}
@@ -22,7 +23,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
 
   protected val masterGrpcImpl: AbstractMasterGrpc
 
-  implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
+  implicit protected val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
 
   // without the lazy, we get an initialized field exception
   private lazy val server: Server = newServer(MasterGrpc.bindService(masterGrpcImpl, ec), node.port)
@@ -86,7 +87,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
     def loopEpoch(epoch: Int, epochWeight: GradState, losses: List[Number]): Future[GradState] = {
       losses.headOption.foreach(loss => log.info(s"Loss after epoch ${epoch - 1}: $loss"))
 
-      if(epoch >= epochs){
+      if (epoch > epochs) {
         log.info("Reached max number of epochs: stopping computation")
         Future.successful(epochWeight.finish(losses.head))
       }
@@ -234,10 +235,10 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
     */
   def run(initialWeights: Vec,
           maxSteps: Int,
-          earlyStopping: EarlyStopping,
+          earlyStopping: EarlyStopping = EarlyStopping.noImprovement(),
           batchSize: Int,
           splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
-          checkEvery: Int = 200): Future[GradState] = {
+          checkEvery: Int = 100): Future[GradState] = {
     atomic { implicit txn =>
       if (masterGrpcImpl.running) {
         Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
@@ -256,6 +257,9 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
         workers.zip(split).foreach {
           case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize))
         }
+        masterGrpcImpl
+          .startLossChecking(minStepsBetweenChecks = checkEvery)
+          .runAsync(monix.execution.Scheduler.Implicits.global)
         log.info("waiting for slaves updates")
         weightsPromise.future
       }
@@ -265,7 +269,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
   class AsyncMasterGrpcImpl extends AbstractMasterGrpc {
 
     private val gradState = Ref(GradState.empty)
-    private val losses    = Ref(ArrayBuffer.empty[Number])
+    //private val losses    = Ref(ArrayBuffer.empty[Number])
 
     private val bestGrad = Ref(Vec.zeros(1))
     private val bestLoss = Ref(Number(Double.MaxValue))
@@ -281,12 +285,59 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
       asyncConfig = config
     }
 
-    def endComputation(): Unit = atomic { implicit txn =>
-      slaves.values.foreach(_.stopAsync(Empty()))
-      losses.set(ArrayBuffer.empty[Number])
+    def endComputation(): Unit = {
+      atomic { implicit txn =>
+        slaves.values.foreach(_.stopAsync(Empty()))
+        //losses.set(ArrayBuffer.empty[Number])
 
-      promise.complete(Success(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish(bestLoss()))))
-      log.info("Async computation ended. Final loss: " + bestLoss())
+        promise.complete(Success(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish(bestLoss()))))
+        log.info("Async computation ended. Final loss: " + bestLoss())
+      }
+    }
+
+    def startLossChecking(leakCoef: Double = 1, minStepsBetweenChecks: Long = 100): Task[Unit] = {
+      def loop(lastStep: Long, losses: List[Number]): Task[Unit] =
+        Task.defer {
+          if (!running) {
+            Task.unit
+          }
+          else {
+            val innerGradState = gradState.single()
+
+            if (innerGradState.updates - lastStep < minStepsBetweenChecks) { //Latest computation was too close
+              log.trace(s"Latest step was too close. Last: $lastStep, current: ${innerGradState.updates}")
+              loop(lastStep, losses).delayExecution(2.seconds)
+            }
+            else {
+              val computedLoss = computeLoss(innerGradState.grad)
+              val loss         = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
+
+              atomic { implicit txn =>
+                //For early stopping: set best loss and related gradient
+                val isBestLoss = bestLoss.transformIfDefined {
+                  case oldLoss if oldLoss > loss => loss
+                }
+                if (isBestLoss) {
+                  bestGrad.set(innerGradState.grad)
+                }
+
+                log.info(s"Steps: ${innerGradState.updates}, loss: $loss")
+              }
+
+              val newLosses = loss :: losses
+
+              if (asyncConfig.stoppingCriterion(newLosses)) { //We converged => end computation
+                log.info("converged to target: stopping computation")
+                Task.now(endComputation())
+              }
+              else {
+                loop(innerGradState.updates, newLosses)
+              }
+            }
+          }
+        }
+
+      loop(-minStepsBetweenChecks, Nil)
     }
 
     def updateGrad(request: GradUpdate): Future[Ack] = {
@@ -299,7 +350,8 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
           log.info("max number of steps reached: stopping computation")
           endComputation()
         }
-        else if (newGradState.updates % asyncConfig.checkEvery == 0) {
+        /*else if (newGradState.updates % asyncConfig.checkEvery == 0) {
+
 
           val loss = computeLoss(newGradState.grad, 5000)
 
@@ -327,7 +379,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
                 log.error("Failed to compute loss", e)
             }
          */
-        }
+        }*/
 
         Future.successful(Ack())
       }

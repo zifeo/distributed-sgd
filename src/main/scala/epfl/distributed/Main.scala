@@ -73,13 +73,14 @@ object Main extends App {
             case asyncMaster: AsyncMaster =>
               val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
                 data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
-              val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 500, splitStrategy).await
+              val w1 =
+                asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy).await
               println(w1)
 
             case syncMaster: SyncMaster =>
               println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
 
-              val w1 = syncMaster.backward(epochs = 100, initialWeights = w0).await
+              val w1 = syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize).await
 
               println(s"End loss after ${w1.updates} epochs: " + w1.loss.get)
           }
@@ -121,14 +122,14 @@ object Main extends App {
           val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
             data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
 
-          val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), 500, splitStrategy).await
+          val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy).await
           println(w1)
           println(asyncMaster.computeLoss(w1.grad, 5000))
 
         case syncMaster: SyncMaster =>
           println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
 
-          val w1 = syncMaster.backward(epochs = 100, initialWeights = w0).await
+          val w1 = syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize).await
 
           println(s"End loss after ${w1.updates} epochs: " + w1.loss.get)
       }

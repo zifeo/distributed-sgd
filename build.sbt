@@ -66,6 +66,7 @@ libraryDependencies ++= List(
     "org.typelevel"              %% "spire"                % "0.15.0",
     "com.typesafe.scala-logging" %% "scala-logging"        % "3.9.0",
     "org.scala-stm"              %% "scala-stm"            % "0.8",
+    "io.monix"                   %% "monix-eval"           % "3.0.0-RC1",
     "org.scalatest"              %% "scalatest"            % "3.0.5" % "test",
     "com.storm-enroute"          %% "scalameter"           % "0.9" % "test",
     "io.kamon"                   %% "kamon-core"           % "1.1.2",
