@@ -1,55 +1,50 @@
 package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.core.SlaveGrpc.SlaveStub
-import epfl.distributed.core.core._
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
+import epfl.distributed.proto.SlaveGrpc.SlaveStub
+import epfl.distributed.proto._
 import epfl.distributed.utils.Pool
 import kamon.Kamon
+import monix.eval.Task
+import monix.execution.{CancelableFuture, Scheduler}
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.stm._
-import scala.concurrent.{ExecutionContextExecutorService, Future}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.util.Random
 
 class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean) {
 
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
-  private val log                                  = Logger(s"slave--${pretty(node)}")
+  private val log                                  = Logger(s"slave-${pretty(node)}")
   private val server                               = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
   private val masterStub                           = MasterGrpc.stub(newChannel(master.host, master.port))
   private val otherSlaves                          = TrieMap[Node, SlaveStub]()
 
   private val runningAsync = Ref(false)
 
-  private var assignedSamples: Seq[Int] = _
-  private var batchSize: Int            = _
+  private var asyncComputation: CancelableFuture[Unit] = _
+  private var assignedSamples: Seq[Int]                = _
+  private var batchSize: Int                           = _
 
   private val weights = Ref(Vec.zeros(1))
 
   private val batchCount = Kamon.counter("slave.batch")
 
-  def start(): Unit = {
+  sys.addShutdownHook {
+    this.stop()
+  }
+
+  def start(): Future[Unit] = {
     require(!ec.isShutdown)
     server.start()
     log.info("started")
 
     // register slave node
-    masterStub.registerSlave(node).onComplete { _ =>
-      log.info("registered")
-    }
-  }
-
-  def stop(): Unit = {
-    // unregister slave node
-    masterStub.unregisterSlave(node).onComplete { _ =>
-      log.info("unregistered")
-
-      server.shutdown()
-      server.awaitTermination()
-      ec.shutdown()
-      log.info("stopped")
+    masterStub.registerSlave(node).map { _ =>
+      log.info("registered to master")
     }
   }
 
@@ -58,9 +53,20 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     server.awaitTermination()
   }
 
-  def asyncComputation(): Unit = {
-    val again = atomic { implicit txn =>
-      if (runningAsync()) {
+  def stop(): Future[Unit] = {
+    // unregister slave node
+    masterStub.unregisterSlave(node).map { _ =>
+      log.info("unregistered from master")
+
+      server.shutdown()
+      ec.shutdown()
+      log.info("stopped")
+    }
+  }
+
+  def asyncTask: Task[Unit] =
+    Task {
+      while (true) {
         val samples = if (batchSize == 1) {
           Seq(data(assignedSamples(Random.nextInt(assignedSamples.size))))
         }
@@ -68,10 +74,11 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
           Random.shuffle[Int, IndexedSeq](assignedSamples.indices) take batchSize map data
         }
 
-        val grads      = samples.map { case (x, y) => model.backward(weights(), x, y) }
-        val gradUpdate = model.learningRate * batchSize * Vec.sum(grads)
+        val innerWeights = weights.single()
+        val grads        = samples.map { case (x, y) => model.backward(innerWeights, x, y) }
+        val gradUpdate   = model.learningRate * batchSize * Vec.sum(grads)
 
-        weights.transform(_ - gradUpdate)
+        weights.single.transform(_ - gradUpdate)
 
         val gradUpdateRequest = GradUpdate(gradUpdate)
         otherSlaves.values.foreach(_.updateGrad(gradUpdateRequest))
@@ -79,17 +86,8 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
         log.trace("update sent")
         batchCount.increment()
-
-        true //Still running in async mode
-      }
-      else {
-        log.info("async computation stopped")
-        false //The computation has stopped
       }
     }
-
-    if (again) asyncComputation() else ()
-  }
 
   class SlaveImpl extends SlaveGrpc.Slave {
 
@@ -148,7 +146,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
           weights() = request.weights
           assignedSamples = request.samples
           batchSize = request.batchSize
-          Future(asyncComputation())
+          asyncComputation = asyncTask.runAsync(Scheduler(ec: ExecutionContext))
 
           Future.successful(Ack())
         }
@@ -168,6 +166,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
       require(async, "Cannot stop async computation: slave is in synchronous mode.")
       log.debug("stopping async computation")
 
+      asyncComputation.cancel()
       runningAsync.single() = false
       Future.successful(Ack())
     }

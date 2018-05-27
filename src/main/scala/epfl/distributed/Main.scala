@@ -3,11 +3,10 @@ package epfl.distributed
 import java.util.logging.LogManager
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.core.Node
-import epfl.distributed.core.ml.{EarlyStopping, SparseSVM}
-import epfl.distributed.core.{AsyncMaster, Master, Slave, SyncMaster}
-import epfl.distributed.math.Vec
-import epfl.distributed.utils.{Config, Dataset, Pool}
+import epfl.distributed.core.ml.SparseSVM
+import epfl.distributed.core.{AbstractMaster, Master, Slave}
+import epfl.distributed.proto.Node
+import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
 import kamon.Kamon
 import kamon.influxdb.InfluxDBReporter
 
@@ -17,10 +16,6 @@ object Main extends App {
   LogManager.getLogManager.readConfiguration()
   val log = Logger(s"bootstrap")
 
-  // settings
-  val config = pureconfig.loadConfigOrThrow[Config]("dsgd")
-  log.info("config loaded: {}", config)
-
   {
     // host information
     val cores  = Runtime.getRuntime.availableProcessors()
@@ -29,12 +24,10 @@ object Main extends App {
     log.info("mem: {}G", if (memory != Long.MaxValue) memory / 1e9 else -1)
   }
 
-  // current node (see application.conf, can be set using env vars)
+  // load settings
+  val config = pureconfig.loadConfigOrThrow[Config]("dsgd")
   val node = Node(config.host, config.port)
-  log.info("node: {}:{}", node.host, node.port)
-
-  import config.async
-  log.info("compute: {}", if (async) "async" else "sync")
+  log.info("config: {}", config)
 
   if (config.record) {
     log.info("recording")
@@ -42,99 +35,62 @@ object Main extends App {
   }
 
   log.info("loading data in: {}", config.dataPath)
-  val featuresCount = 47236
-
-  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, full = config.full).map {
-    case (x, y) => Vec(x, featuresCount) -> y
+  val (data, loadDuration) = Measure.duration {
+    Dataset.rcv1(config.dataPath, full = config.full)
   }
-  log.info("data loaded: {}", data.length)
+  log.info("data loaded: {} ({}s)", data.length, loadDuration)
 
   // could use another model
   val model = new SparseSVM(config.lambda, config.learningRate / data.length)
 
+  import Pool.AwaitableFuture
+
+  def scenario(master: AbstractMaster): Unit = {
+
+    val w0 = data(0)._1.zerosLike
+    val l0 = master.computeLossDistributed(w0).await
+    println(l0)
+    val w1 = master.fit(w0, config).await
+    println(w1)
+    val l1 = master.computeLossDistributed(w1).await
+    println(l1)
+
+  }
+
   (config.masterHost, config.masterPort) match {
 
     case (Some(masterHost), Some(masterPort)) if masterHost == node.host && masterPort == node.port =>
-      log.info("master")
+      log.info("launch: only master")
 
-      val master = Master.create(node, data, model, async)
+      val master = Master(node, data, model, config.async, config.nodeCount)
       master.start()
 
-      sys.addShutdownHook {
-        master.stop()
-      }
-
-      master.onSlaveJoin { slaveCount =>
-        import Pool.AwaitableFuture
-        val w0 = Vec.zeros(featuresCount)
-
-        if (slaveCount == config.nodeCount) {
-          master match {
-            case asyncMaster: AsyncMaster =>
-              val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
-                data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
-              val w1 =
-                asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy).await
-              println(w1)
-
-            case syncMaster: SyncMaster =>
-              println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
-
-              val w1 = syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize).await
-
-              println(s"End loss after ${w1.updates} epochs: " + w1.loss.get)
-          }
-        }
-      }
+      scenario(master)
 
       master.awaitTermination()
 
     case (Some(masterHost), Some(masterPort)) =>
-      log.info("slave")
+      log.info("launch: only slave")
 
       val masterNode = Node(masterHost, masterPort)
-      val slave      = new Slave(node, masterNode, data, model, async)
+      val slave      = new Slave(node, masterNode, data, model, config.async)
       slave.start()
-
-      sys.addShutdownHook {
-        slave.stop()
-      }
 
       slave.awaitTermination()
 
     case _ =>
-      log.info("dev mode")
+      log.info("launch: master + slaves (dev)")
 
-      val masterNode :: slaveNodes = (0 to (1 + config.nodeCount)).toList.map(i => Node(config.host, config.port + i))
-      val master                   = Master.create(masterNode, data, model, async)
-      val slaves                   = slaveNodes.map(n => new Slave(n, masterNode, data, model, async))
+      val masterNode :: slaveNodes = (0 until (1 + config.nodeCount)).map(i => Node(config.host, config.port + i)).toList
+      val master                   = Master(masterNode, data, model, config.async, config.nodeCount)
+      val slaves                   = slaveNodes.map(n => new Slave(n, masterNode, data, model, config.async))
 
       master.start()
-      slaves.foreach(_.start())
-      Thread.sleep(2000) // ensure both slaves and master are launched in dev mode
+      slaves.foreach(_.start().await)
 
-      val w0 = Vec.zeros(featuresCount)
+      scenario(master)
 
-      import Pool.AwaitableFuture
-
-      master match {
-        case asyncMaster: AsyncMaster =>
-          val splitStrategy = (data: Array[(Vec, Int)], nSlaves: Int) =>
-            data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
-
-          val w1 = asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy).await
-          println(w1)
-          println(asyncMaster.computeLoss(w1.grad, 5000))
-
-        case syncMaster: SyncMaster =>
-          println("Initial loss: " + syncMaster.computeLossDistributed(w0).await)
-
-          val w1 = syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize).await
-
-          println(s"End loss after ${w1.updates} epochs: " + w1.loss.get)
-      }
-
-      slaves.foreach(_.stop())
+      slaves.foreach(_.stop().await)
       master.stop()
 
   }
