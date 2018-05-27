@@ -10,7 +10,7 @@ object EarlyStopping {
 
   def target(target: Number): EarlyStopping = (losses: Seq[Number]) => losses.headOption.fold(false)(_ <= target)
 
-  def noImprovement(patience: Int = 1, minDelta: Number = 1e-3, minSteps: Option[Int] = None): EarlyStopping = {
+  def noImprovement(patience: Int = 5, minDelta: Number = 1e-3, minSteps: Option[Int] = None): EarlyStopping = {
     losses: Seq[Number] =>
       {
         val absMinDelta = abs(minDelta)
