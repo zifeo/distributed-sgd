@@ -43,9 +43,9 @@ service Slave {
     rpc Gradient (GradientRequest) returns (GradUpdate) {}
 
     // Async operations
-    rpc InitAsync (AsyncInit) returns (Ack) {}
-    rpc UpdateGrad (GradUpdate) returns (Ack) {}
+    rpc StartAsync (StartAsyncRequest) returns (Ack) {}
     rpc StopAsync (google.protobuf.Empty) returns (Ack) {}
+    rpc UpdateGrad (GradUpdate) returns (Ack) {}
 }
 
 message ForwardRequest {
@@ -62,7 +62,7 @@ message GradientRequest {
     repeated int32 samples = 2 [packed=true];
 }
 
-message AsyncInit {
+message StartAsyncRequest {
     Sparse weights = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
     repeated int32 samples = 2;
     int32 batchSize = 3;

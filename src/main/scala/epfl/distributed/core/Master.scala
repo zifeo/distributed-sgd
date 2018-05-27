@@ -2,12 +2,11 @@ package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
-import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
+import epfl.distributed.core.ml.{GradState, SparseSVM}
 import epfl.distributed.math.Vec
 import epfl.distributed.proto.SlaveGrpc.SlaveStub
 import epfl.distributed.proto._
-import epfl.distributed.utils.Dataset.Data
-import epfl.distributed.utils.{Config, Measure, Pool}
+import epfl.distributed.utils.{Measure, Pool}
 import io.grpc.Server
 import kamon.Kamon
 import spire.math.Number
@@ -142,9 +141,9 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
   def distributedLoss(weights: Vec): Future[Number] = {
     val loss = predict(weights)
       .map(
-          _.zip(data)
-            .map { case (p, (_, y)) => (p - y) ** 2 }
-            .reduce(_ + _) / data.length)
+        _.zip(data)
+          .map { case (p, (_, y)) => (p - y) ** 2 }
+          .reduce(_ + _) / data.length)
 
     loss
   }

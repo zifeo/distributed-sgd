@@ -5,14 +5,11 @@ import java.util.logging.LogManager
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.ml.{EarlyStopping, SparseSVM}
 import epfl.distributed.core.{Master, MasterAsync, MasterSync, Slave}
-import epfl.distributed.math.Vec
 import epfl.distributed.proto.Node
 import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
 import kamon.Kamon
 import kamon.influxdb.InfluxDBReporter
-
-import scala.concurrent.Future
 
 object Main extends App {
 
@@ -63,22 +60,22 @@ object Main extends App {
       val res = master match {
         case m: MasterAsync =>
           m.fit(
-              initialWeights = w0,
-              maxEpoch = 1e6.toInt,
-              batchSize = config.batchSize,
-              learningRate = config.learningRate,
-              stoppingCriterion = EarlyStopping.noImprovement(),
-              splitStrategy = splitStrategy,
-              checkEvery = 100,
-              leakLossCoef = 1
+            initialWeights = w0,
+            maxEpoch = 1e6.toInt,
+            batchSize = config.batchSize,
+            learningRate = config.learningRate,
+            stoppingCriterion = EarlyStopping.noImprovement(),
+            splitStrategy = splitStrategy,
+            checkEvery = 100,
+            leakLossCoef = 1
           )
         case m: MasterSync =>
           m.fit(
-              initialWeights = w0,
-              maxEpochs = 100,
-              batchSize = config.batchSize,
-              learningRate = config.learningRate,
-              stoppingCriterion = EarlyStopping.noImprovement()
+            initialWeights = w0,
+            maxEpochs = 100,
+            batchSize = config.batchSize,
+            learningRate = config.learningRate,
+            stoppingCriterion = EarlyStopping.noImprovement()
           )
       }
       res.await.grad

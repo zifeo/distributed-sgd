@@ -126,7 +126,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
       GradUpdate(Vec.sum(grad))
     }
 
-    def initAsync(request: AsyncInit): Future[Ack] = {
+    def startAsync(request: StartAsyncRequest): Future[Ack] = {
       require(async, "Cannot initialize async computation: slave is in synchronous mode.")
       require(!runningAsync.single(), "Async computation already running, can't be initialized unless stopped first")
 

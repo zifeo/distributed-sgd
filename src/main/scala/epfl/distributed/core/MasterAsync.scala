@@ -2,7 +2,7 @@ package epfl.distributed.core
 
 import com.google.protobuf.empty.Empty
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
-import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
+import epfl.distributed.core.ml.{GradState, SparseSVM}
 import epfl.distributed.math.Vec
 import epfl.distributed.proto._
 import kamon.Kamon
@@ -15,7 +15,7 @@ import scala.concurrent.{Future, Promise}
 import scala.util.Success
 
 class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
-    extends Master(node, data, model, nodeCount: Int) {
+  extends Master(node, data, model, nodeCount: Int) {
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
 
@@ -55,7 +55,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
       val split   = splitStrategy(data, workers.size)
 
       workers.zip(split).foreach {
-        case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize, learningRate))
+        case (slave, assignment) => slave.startAsync(StartAsyncRequest(initialWeights, assignment, batchSize, learningRate))
       }
       log.info("waiting for slaves updates")
       masterGrpcImpl
