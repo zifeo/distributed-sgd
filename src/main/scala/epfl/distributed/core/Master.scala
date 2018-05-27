@@ -2,10 +2,11 @@ package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
-import epfl.distributed.core.ml.{GradState, SparseSVM}
+import epfl.distributed.core.ml.{GradState, SparseSVM, SplitStrategy}
 import epfl.distributed.math.Vec
 import epfl.distributed.proto.SlaveGrpc.SlaveStub
 import epfl.distributed.proto._
+import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Measure, Pool}
 import io.grpc.Server
 import kamon.Kamon
@@ -53,16 +54,15 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
   def withClusterReady[T](f: => Future[T]): Future[T] =
     clusterReady.flatMap(_ => f)
 
-  def predict(weights: Vec): Future[Iterable[Number]] =
+  def predict(weights: Vec, splitStrategy: SplitStrategy): Future[Iterable[Number]] =
     withClusterReady {
       Measure.durationLog(log, "forward") {
         val workers = slaves.values
-        val piece   = Math.floorDiv(data.length, workers.size)
+        val split   = splitStrategy(data, workers.size)
 
-        val work = workers.zipWithIndex.map {
-          case (worker, i) =>
-            val sample = i * piece
-            val req    = ForwardRequest(sample until (sample + piece), weights)
+        val work = workers.zip(split).map {
+          case (worker, idx) =>
+            val req = ForwardRequest(idx, weights)
             worker.forward(req)
         }
 
@@ -74,7 +74,8 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
           maxEpochs: Int,
           batchSize: Int,
           learningRate: Double,
-          stoppingCriterion: EarlyStopping): Future[GradState] =
+          stoppingCriterion: EarlyStopping,
+          splitStrategy: SplitStrategy): Future[GradState] =
     withClusterReady {
       Measure.durationLog(log, "backward") {
 
@@ -84,8 +85,10 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
               itWeights.flatMap(w => apply(w, it))
           }
 
-        val workersWithIndex = slaves.values.zipWithIndex
-        val piece            = Math.floorDiv(data.length, workersWithIndex.size)
+        val workers = slaves.values
+        val split   = splitStrategy(data, workers.size)
+
+        val maxSamples       = split.map(_.size).max
 
         def loopEpoch(epoch: Int, epochWeight: GradState, losses: List[Number]): Future[GradState] = {
           losses.headOption.foreach(loss => log.info(s"Loss after epoch ${epoch - 1}: $loss"))
@@ -99,17 +102,15 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
             Future.successful(epochWeight.finish(losses.head))
           }
           else {
-            val futureEpochWeight = loop(0 until piece by batchSize)(epochWeight.grad) { // batch
+            val futureEpochWeight = loop(0 until maxSamples by batchSize)(epochWeight.grad) { // batch
               case (batchWeights, batch) =>
-                log.debug(s"samples ${batch + 1} - ${Math.min(batch + batchSize, piece)} / $piece")
+                log.debug(s"samples ${batch + 1} - ${Math.min(batch + batchSize, maxSamples)} / $maxSamples")
 
                 val timer = Kamon.timer("master.sync.batch.duration").start()
-                val work = workersWithIndex.map {
-                  case (worker, i) =>
-                    val sample = i * piece + batch
-
+                val work = workers.zip(split).map {
+                  case (worker, idx) =>
                     val req =
-                      GradientRequest(batchWeights, sample until Math.min(sample + batchSize, i * piece + piece))
+                      GradientRequest(batchWeights, idx.slice(batch, batch + batch))
                     worker.gradient(req)
                 }
                 Future
@@ -125,7 +126,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
 
             for {
               newEpochWeight <- futureEpochWeight
-              loss           <- distributedLoss(newEpochWeight)
+              loss           <- distributedLoss(newEpochWeight, splitStrategy)
               newGrad        <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses)
             } yield newGrad
           }
@@ -138,12 +139,12 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
       }
     }
 
-  def distributedLoss(weights: Vec): Future[Number] = {
-    val loss = predict(weights)
+  def distributedLoss(weights: Vec, splitStrategy: SplitStrategy): Future[Number] = {
+    val loss = predict(weights, splitStrategy)
       .map(
-        _.zip(data)
-          .map { case (p, (_, y)) => (p - y) ** 2 }
-          .reduce(_ + _) / data.length)
+          _.zip(data)
+            .map { case (p, (_, y)) => (p - y) ** 2 }
+            .reduce(_ + _) / data.length)
 
     loss
   }

@@ -2,9 +2,10 @@ package epfl.distributed.core
 
 import com.google.protobuf.empty.Empty
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
-import epfl.distributed.core.ml.{GradState, SparseSVM}
+import epfl.distributed.core.ml.{GradState, SparseSVM, SplitStrategy}
 import epfl.distributed.math.Vec
 import epfl.distributed.proto._
+import epfl.distributed.utils.Dataset.Data
 import kamon.Kamon
 import monix.eval.Task
 import spire.math.Number
@@ -15,14 +16,9 @@ import scala.concurrent.{Future, Promise}
 import scala.util.Success
 
 class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
-  extends Master(node, data, model, nodeCount: Int) {
+    extends Master(node, data, model, nodeCount: Int) {
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
-
-  protected case class AsyncConfig(maxSteps: Int,
-                                   stoppingCriterion: EarlyStopping,
-                                   splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
-                                   checkEvery: Int)
 
   /**
     * Starts the async computation of the weights
@@ -39,7 +35,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
           batchSize: Int,
           learningRate: Double,
           stoppingCriterion: EarlyStopping,
-          splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
+          splitStrategy: SplitStrategy,
           checkEvery: Int,
           leakLossCoef: Double): Future[GradState] = {
 
@@ -49,13 +45,14 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
       log.info("starting async computation")
       val weightsPromise = Promise[GradState]
       masterGrpcImpl
-        .initState(initialWeights, AsyncConfig(maxEpoch, stoppingCriterion, splitStrategy, checkEvery), weightsPromise)
+        .initState(initialWeights, maxEpoch, stoppingCriterion, weightsPromise)
 
       val workers = slaves.values
       val split   = splitStrategy(data, workers.size)
 
       workers.zip(split).foreach {
-        case (slave, assignment) => slave.startAsync(StartAsyncRequest(initialWeights, assignment, batchSize, learningRate))
+        case (slave, assignment) =>
+          slave.startAsync(StartAsyncRequest(initialWeights, assignment, batchSize, learningRate))
       }
       log.info("waiting for slaves updates")
       masterGrpcImpl
@@ -72,15 +69,20 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
     private val bestGrad = Ref(Vec.zeros(1))
     private val bestLoss = Ref(Number(Double.MaxValue))
 
-    private var promise: Promise[GradState] = _
-    private var asyncConfig: AsyncConfig    = _
+    private var promise: Promise[GradState]      = _
+    private var maxSteps: Int                    = _
+    private var stoppingCriterion: EarlyStopping = _
 
     @inline def running: Boolean = gradState.single().end.isEmpty
 
-    def initState(initialWeights: Vec, config: AsyncConfig, weightsPromise: Promise[GradState]): Unit = {
+    def initState(initialWeights: Vec,
+                  initMaxSteps: Int,
+                  initStoppingCriterion: EarlyStopping,
+                  weightsPromise: Promise[GradState]): Unit = {
       gradState.single() = GradState.start(initialWeights)
       promise = weightsPromise
-      asyncConfig = config
+      maxSteps = initMaxSteps
+      stoppingCriterion = initStoppingCriterion
     }
 
     def endComputation(): Unit = {
@@ -126,7 +128,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
 
               val newLosses = loss :: losses
 
-              if (asyncConfig.stoppingCriterion(newLosses)) { // converged => end computation
+              if (stoppingCriterion(newLosses)) { // converged => end computation
                 log.info("converged to target: stopping computation")
                 Task.now(endComputation())
               }
@@ -146,7 +148,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
 
         log.trace(s"${newGradState.updates} updates received")
 
-        if (newGradState.updates >= asyncConfig.maxSteps) {
+        if (newGradState.updates >= maxSteps) {
           log.info("max number of steps reached: stopping computation")
           endComputation()
         }

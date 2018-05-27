@@ -3,7 +3,7 @@ package epfl.distributed
 import java.util.logging.LogManager
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.ml.{EarlyStopping, SparseSVM}
+import epfl.distributed.core.ml.{EarlyStopping, SparseSVM, SplitStrategy}
 import epfl.distributed.core.{Master, MasterAsync, MasterSync, Slave}
 import epfl.distributed.proto.Node
 import epfl.distributed.utils.Dataset.Data
@@ -49,33 +49,33 @@ object Main extends App {
 
   def scenario(master: Master): Unit = {
 
-    val splitStrategy =
-      (data: Data, nSlaves: Int) => data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
+    val ss = SplitStrategy.vanilla
 
     val w0 = data(0)._1.zerosLike
-    val l0 = master.distributedLoss(w0).await
+    val l0 = master.distributedLoss(w0, ss).await
     println(l0)
 
     val w1 = Measure.durationLog(log, "fit") {
       val res = master match {
         case m: MasterAsync =>
           m.fit(
-            initialWeights = w0,
-            maxEpoch = 1e6.toInt,
-            batchSize = config.batchSize,
-            learningRate = config.learningRate,
-            stoppingCriterion = EarlyStopping.noImprovement(),
-            splitStrategy = splitStrategy,
-            checkEvery = 100,
-            leakLossCoef = 1
+              initialWeights = w0,
+              maxEpoch = 1e6.toInt,
+              batchSize = config.batchSize,
+              learningRate = config.learningRate,
+              stoppingCriterion = EarlyStopping.noImprovement(),
+              splitStrategy = ss,
+              checkEvery = 100,
+              leakLossCoef = 1
           )
         case m: MasterSync =>
           m.fit(
-            initialWeights = w0,
-            maxEpochs = 100,
-            batchSize = config.batchSize,
-            learningRate = config.learningRate,
-            stoppingCriterion = EarlyStopping.noImprovement()
+              initialWeights = w0,
+              maxEpochs = 100,
+              batchSize = config.batchSize,
+              learningRate = config.learningRate,
+              stoppingCriterion = EarlyStopping.noImprovement(),
+              splitStrategy = ss,
           )
       }
       res.await.grad
@@ -83,7 +83,7 @@ object Main extends App {
 
     println(w1)
     log.info("final weights: {}", w1)
-    val l1 = master.distributedLoss(w1).await
+    val l1 = master.distributedLoss(w1, ss).await
     println(l1)
 
   }
