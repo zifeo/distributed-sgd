@@ -12,6 +12,8 @@ import kamon.influxdb.InfluxDBReporter
 
 object Main extends App {
 
+  import Pool.AwaitableFuture
+
   // init logback
   LogManager.getLogManager.readConfiguration()
   val log = Logger(s"bootstrap")
@@ -43,8 +45,6 @@ object Main extends App {
 
   // could use another model
   val model = new SparseSVM(config.lambda, config.learningRate / data.length)
-
-  import Pool.AwaitableFuture
 
   def scenario(master: Master): Unit = {
 

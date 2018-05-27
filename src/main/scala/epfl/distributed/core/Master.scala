@@ -20,19 +20,15 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
 
   protected val masterGrpcImpl: AbstractMasterGrpc
 
+  protected val log                                          = Logger(s"mastr-${pretty(node)}")
+  protected val slaves                                       = TrieMap[Node, SlaveStub]()
   implicit protected val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
 
   // without the lazy, we get an initialized field exception
   private lazy val server: Server = newServer(MasterGrpc.bindService(masterGrpcImpl, ec), node.port)
 
-  protected val log    = Logger(s"mastr-${pretty(node)}")
-  protected val slaves = TrieMap[Node, SlaveStub]()
-
   private val clusterReadyPromise = Promise[Unit]()
-  private val clusterReady                = clusterReadyPromise.future
-
-  def withClusterReady[T](f: => Future[T]): Future[T] =
-    clusterReady.flatMap(_ => f)
+  private val clusterReady        = clusterReadyPromise.future
 
   sys.addShutdownHook {
     this.stop()
@@ -55,16 +51,19 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
     log.info("stopped")
   }
 
+  def withClusterReady[T](f: => Future[T]): Future[T] =
+    clusterReady.flatMap(_ => f)
+
   def forward(weights: Vec): Future[Iterable[Number]] =
     withClusterReady {
       Measure.durationLog(log, "forward") {
         val workers = slaves.values
-        val piece = Math.floorDiv(data.length, workers.size)
+        val piece   = Math.floorDiv(data.length, workers.size)
 
         val work = workers.zipWithIndex.map {
           case (worker, i) =>
             val sample = i * piece
-            val req = ForwardRequest(sample until (sample + piece), weights)
+            val req    = ForwardRequest(sample until (sample + piece), weights)
             worker.forward(req)
         }
 
@@ -86,7 +85,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
           }
 
         val workersWithIndex = slaves.values.zipWithIndex
-        val piece = Math.floorDiv(data.length, workersWithIndex.size)
+        val piece            = Math.floorDiv(data.length, workersWithIndex.size)
 
         def loopEpoch(epoch: Int, epochWeight: GradState, losses: List[Number]): Future[GradState] = {
           losses.headOption.foreach(loss => log.info(s"Loss after epoch ${epoch - 1}: $loss"))
@@ -117,22 +116,17 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
                   .sequence(work)
                   .map { res =>
                     timer.stop()
-                    val grad = Vec.mean(res.map(_.grad))
-                    val durations = res.map(x => x.terminatedAt - x.startedAt)
-                    val durationMax = durations.max / 1000.0
-                    val durationMin = durations.min / 1000.0
-                    val durationAvg = durations.sum / 1000.0 / durations.size
+                    val grad     = Vec.mean(res.map(_.gradUpdate))
                     val sparsity = 100 * grad.sparsity()
-                    log.trace(
-                      f"$epoch:$batch sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
+                    log.debug(f"$epoch:$batch sparsity $sparsity%.1f%% duration")
                     batchWeights - grad
                   }
             }
 
             for {
               newEpochWeight <- futureEpochWeight
-              loss <- computeLossDistributed(newEpochWeight)
-              newGrad <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses)
+              loss           <- computeLossDistributed(newEpochWeight)
+              newGrad        <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses)
             } yield newGrad
           }
         }
@@ -147,9 +141,9 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
   def computeLossDistributed(weights: Vec): Future[Number] = {
     val loss = forward(weights)
       .map(
-        _.zip(data)
-          .map { case (p, (_, y)) => (p - y) ** 2 }
-          .reduce(_ + _) / data.length)
+          _.zip(data)
+            .map { case (p, (_, y)) => (p - y) ** 2 }
+            .reduce(_ + _) / data.length)
 
     loss
   }

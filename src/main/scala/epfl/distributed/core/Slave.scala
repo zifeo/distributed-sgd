@@ -17,19 +17,18 @@ import scala.util.{Random, Try}
 
 class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean) {
 
-  implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
   private val log                                  = Logger(s"slave-${pretty(node)}")
-  private val server                               = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
-  private val masterStub                           = MasterGrpc.stub(newChannel(master.host, master.port))
   private val otherSlaves                          = TrieMap[Node, SlaveStub]()
+  implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
 
-  private val runningAsync = Ref(false)
+  private val server     = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
+  private val masterStub = MasterGrpc.stub(newChannel(master.host, master.port))
 
+  private val runningAsync                             = Ref(false)
+  private val weights                                  = Ref(Vec.zeros(1))
   private var asyncComputation: CancelableFuture[Unit] = _
   private var assignedSamples: Seq[Int]                = _
   private var batchSize: Int                           = _
-
-  private val weights = Ref(Vec.zeros(1))
 
   sys.addShutdownHook {
     this.stop()
@@ -80,9 +79,9 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
         val gradUpdateRequest = GradUpdate(gradUpdate)
         otherSlaves.values.foreach(_.updateGrad(gradUpdateRequest))
-        Kamon.counter("slave.async.batch").increment()
         masterStub.updateGrad(gradUpdateRequest)
 
+        Kamon.counter("slave.async.batch").increment()
         log.trace("update sent")
       }
     }
@@ -114,8 +113,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
       ForwardReply(preds)
     }
 
-    def gradient(request: GradientRequest): Future[GradientReply] = Future {
-      val receivedAt                     = System.currentTimeMillis()
+    def gradient(request: GradientRequest): Future[GradUpdate] = Future {
       val GradientRequest(w, samplesIdx) = request
 
       val grad = samplesIdx
@@ -124,47 +122,41 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
           model.backward(w, x, y)
         }
 
-      GradientReply(model.learningRate * Vec.sum(grad), receivedAt, System.currentTimeMillis())
+      GradUpdate(model.learningRate * Vec.sum(grad))
     }
 
     def initAsync(request: AsyncInit): Future[Ack] = {
       require(async, "Cannot initialize async computation: slave is in synchronous mode.")
+      require(!runningAsync.single(), "Async computation already running, can't be initialized unless stopped first")
 
-      if (runningAsync.single()) {
-        Future.failed(
-            new IllegalStateException("Async computation already running, can't be initialized unless stopped first"))
+      atomic { implicit txn =>
+        runningAsync() = true
+        weights() = request.weights
       }
-      else {
-        log.info(
-            s"initializing async computation. ${request.samples.size} samples assigned. Batch size: ${request.batchSize}")
-        atomic { implicit txn =>
-          runningAsync() = true
-          weights() = request.weights
-        }
-        assignedSamples = request.samples
-        batchSize = request.batchSize
-        asyncComputation = asyncTask.runAsync(Scheduler(ec: ExecutionContext))
+      assignedSamples = request.samples
+      batchSize = request.batchSize
+      asyncComputation = asyncTask.runAsync(Scheduler(ec: ExecutionContext))
 
-        Future.successful(Ack())
-
-      }
+      log.info(s"init async computation, ${request.samples.size} samples assigned, batch size: ${request.batchSize}")
+      Future.successful(Ack())
     }
 
     def updateGrad(request: GradUpdate): Future[Ack] = {
       require(async, "Cannot update gradient: slave is in synchronous mode.")
 
-      log.trace("update received")
-
       weights.single.transform(_ - request.gradUpdate)
+
+      log.trace("update received")
       Future.successful(Ack())
     }
 
     def stopAsync(request: com.google.protobuf.empty.Empty): Future[Ack] = {
       require(async, "Cannot stop async computation: slave is in synchronous mode.")
-      log.debug("stopping async computation")
 
       runningAsync.single() = false
       Try(asyncComputation.cancel())
+
+      log.debug("stopping async computation")
       Future.successful(Ack())
     }
 

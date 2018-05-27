@@ -15,7 +15,7 @@ import scala.concurrent.{Future, Promise}
 import scala.util.Success
 
 class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
-  extends Master(node, data, model, nodeCount: Int) {
+    extends Master(node, data, model, nodeCount: Int) {
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
 
@@ -50,9 +50,9 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
         log.info("starting async computation")
         val weightsPromise = Promise[GradState]
         masterGrpcImpl.initState(
-          initialWeights,
-          AsyncConfig(initialWeights, maxSteps, earlyStopping, batchSize, splitStrategy, checkEvery),
-          weightsPromise)
+            initialWeights,
+            AsyncConfig(initialWeights, maxSteps, earlyStopping, batchSize, splitStrategy, checkEvery),
+            weightsPromise)
 
         val workers = slaves.values
         val split   = splitStrategy(data, workers.size)
@@ -154,36 +154,6 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
           log.info("max number of steps reached: stopping computation")
           endComputation()
         }
-        /*else if (newGradState.updates % asyncConfig.checkEvery == 0) {
-
-
-          val loss = computeLoss(newGradState.grad, 5000)
-
-          val newLosses = atomic { implicit txn =>
-            //For early stopping: set best loss and related gradient
-            val isBestLoss = bestLoss.transformIfDefined {
-              case oldLoss if oldLoss > loss => loss
-            }
-            if (isBestLoss) {
-              bestGrad.set(newGradState.grad)
-            }
-
-            /*computeFullLoss(newGradState.grad).onComplete {
-              case Success(loss) =>*/
-            log.info(s"Steps: ${newGradState.updates}, loss: $loss")
-            losses.transformAndGet(_ += loss)
-          }
-
-          if (asyncConfig.stoppingCriterion(newLosses.toArray[Number])) { //We converged => end computation
-            log.info("converged to target: stopping computation")
-            endComputation()
-          }
-          /*
-              case Failure(e) =>
-                log.error("Failed to compute loss", e)
-            }
-         */
-        }*/
 
         Future.successful(Ack())
       }

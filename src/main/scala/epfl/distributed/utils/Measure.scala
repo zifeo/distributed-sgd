@@ -10,8 +10,8 @@ object Measure {
 
   def duration[T](f: => T): (T, Double) = {
     val start = currentMs
-    val res = f
-    val dur = currentMs - start
+    val res   = f
+    val dur   = currentMs - start
     (res, dur / 1e3)
   }
 
@@ -26,8 +26,8 @@ object Measure {
   def durationLog[T](log: Logger, name: String)(f: => T): T = {
     log.info("{} start", name)
     val start = currentMs
-    val res = f
-    val dur = (currentMs - start) / 1e3
+    val res   = f
+    val dur   = (currentMs - start) / 1e3
     log.info("{} end ({}s)", name, dur)
     res
   }
