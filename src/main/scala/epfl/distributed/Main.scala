@@ -5,6 +5,7 @@ import java.util.logging.LogManager
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.ml.{EarlyStopping, SparseSVM, SplitStrategy}
 import epfl.distributed.core.{Master, MasterAsync, MasterSync, Slave}
+import epfl.distributed.math.{Dense, Sparse, Vec}
 import epfl.distributed.proto.Node
 import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
@@ -53,38 +54,42 @@ object Main extends App {
 
     val w0 = data(0)._1.zerosLike
     val l0 = master.distributedLoss(w0, ss).await
-    println(l0)
+    log.info("initial loss: {}", l0)
+    val a0 = master.distributedAccuracy(w0, ss).await
+    log.info("initial accuracy: {}", a0)
 
     val w1 = Measure.durationLog(log, "fit") {
       val res = master match {
         case m: MasterAsync =>
           m.fit(
               initialWeights = w0,
-              maxEpoch = 1e6.toInt,
+              maxEpoch = config.maxEpochs,
               batchSize = config.batchSize,
               learningRate = config.learningRate,
               stoppingCriterion = EarlyStopping.noImprovement(),
               splitStrategy = ss,
-              checkEvery = 100,
-              leakLossCoef = 1
+              checkEvery = config.gossipInterval,
+              leakLossCoef = config.leakyLoss
           )
         case m: MasterSync =>
           m.fit(
               initialWeights = w0,
-              maxEpochs = 100,
+              maxEpochs = config.maxEpochs,
               batchSize = config.batchSize,
               learningRate = config.learningRate,
               stoppingCriterion = EarlyStopping.noImprovement(),
-              splitStrategy = ss,
+              splitStrategy = ss
           )
       }
       res.await.grad
     }
 
     println(w1)
-    log.info("final weights: {}", w1)
+    log.info("final weights: {}", w1.map.map { case (idx, n) => s"$idx:$n" }.mkString(" "))
     val l1 = master.distributedLoss(w1, ss).await
-    println(l1)
+    log.info("final loss: {}", l1)
+    val a1 = master.distributedAccuracy(w1, ss).await
+    log.info("final accuracy: {}", a1)
 
   }
 

@@ -5,7 +5,7 @@ import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
 import epfl.distributed.proto.SlaveGrpc.SlaveStub
 import epfl.distributed.proto._
-import epfl.distributed.utils.Pool
+import epfl.distributed.utils.{Measure, Pool}
 import kamon.Kamon
 import monix.eval.Task
 import monix.execution.{CancelableFuture, Scheduler}
@@ -115,15 +115,17 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     }
 
     def gradient(request: GradientRequest): Future[GradUpdate] = Future {
-      val GradientRequest(w, samplesIdx) = request
+      Measure.durationLog(log, "gradient") {
+        val GradientRequest(w, samplesIdx) = request
 
-      val grad = samplesIdx
-        .map { idx =>
-          val (x, y) = data(idx)
-          model.backward(w, x, y)
-        }
+        val grad = samplesIdx
+          .map { idx =>
+            val (x, y) = data(idx)
+            model.backward(w, x, y)
+          }
 
-      GradUpdate(Vec.sum(grad))
+        GradUpdate(Vec.sum(grad))
+      }
     }
 
     def startAsync(request: StartAsyncRequest): Future[Ack] = {
