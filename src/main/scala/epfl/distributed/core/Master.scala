@@ -105,7 +105,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
                 val sample = i * piece + batch
 
                 val req =
-                  GradientRequest(sample until Math.min(sample + batchSize, i * piece + piece), 0.1, 0, batchWeights)
+                  GradientRequest(batchWeights, sample until Math.min(sample + batchSize, i * piece + piece))
                 worker.gradient(req)
             }
             Future
@@ -119,7 +119,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
                 val sparsity    = 100 * grad.sparsity()
                 log.trace(
                     f"$epoch:$batch sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
-                batchWeights + grad
+                batchWeights - grad
               }
         }
 
@@ -208,7 +208,7 @@ class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends 
   class SyncMasterGrpcImpl extends AbstractMasterGrpc {
 
     override def updateGrad(request: GradUpdate): Future[Ack] =
-      throw new UnsupportedOperationException("Synchronous master cannont perform async operation update grad")
+      throw new UnsupportedOperationException("Synchronous master cannot perform async operation update grad")
   }
 }
 

@@ -20,8 +20,6 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   private val masterStub                           = MasterGrpc.stub(newChannel(master.host, master.port))
   private val otherSlaves                          = TrieMap[Node, SlaveStub]()
 
-  private val gamma = 1d / data.length
-
   private val runningAsync = Ref(false)
 
   private var assignedSamples: Seq[Int] = _
@@ -68,7 +66,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         }
 
         val grads      = samples.map { case (x, y) => model.backward(weights(), x, y) }
-        val gradUpdate = gamma * batchSize * Vec.sum(grads)
+        val gradUpdate = model.learningRate * batchSize * Vec.sum(grads)
 
         weights.transform(_ - gradUpdate)
 
@@ -117,17 +115,16 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     }
 
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
-      val receivedAt                                   = System.currentTimeMillis()
-      val GradientRequest(samplesIdx, step, lambda, w) = request
+      val receivedAt                           = System.currentTimeMillis()
+      val GradientRequest(w, samplesIdx) = request
 
       val grad = samplesIdx
         .map { idx =>
           val (x, y) = data(idx)
           model.backward(w, x, y)
         }
-        .reduce(_ + _)
 
-      GradientReply(-step * grad, receivedAt, System.currentTimeMillis())
+      GradientReply(model.learningRate * Vec.sum(grad), receivedAt, System.currentTimeMillis())
     }
 
     def initAsync(request: AsyncInit): Future[Ack] = {

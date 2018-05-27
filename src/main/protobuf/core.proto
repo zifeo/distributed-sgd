@@ -15,7 +15,7 @@ service Master {
     rpc RegisterSlave (Node) returns (Ack) {}
     rpc UnregisterSlave (Node) returns (Ack) {}
 
-    //Async operation
+    // Async operation
     rpc UpdateGrad (GradUpdate) returns (Ack) {}
 }
 
@@ -31,11 +31,11 @@ service Slave {
     rpc RegisterSlave (Node) returns (Ack) {}
     rpc UnregisterSlave (Node) returns (Ack) {}
 
-    //Sync operations
+    // Sync operations
     rpc Forward (ForwardRequest) returns (ForwardReply) {}
     rpc Gradient (GradientRequest) returns (GradientReply) {}
 
-    //Async operations
+    // Async operations
     rpc InitAsync (AsyncInit) returns (Ack) {}
     rpc UpdateGrad (GradUpdate) returns (Ack) {}
     rpc StopAsync (google.protobuf.Empty) returns (Ack) {}
@@ -56,10 +56,8 @@ message ForwardReply {
 }
 
 message GradientRequest {
-    repeated int32 samples = 1 [packed=true];
-    double step = 2;
-    double lambda = 3;
-    Sparse weights = 4 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
+    Sparse weights = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
+    repeated int32 samples = 2 [packed=true];
 }
 
 message GradientReply {

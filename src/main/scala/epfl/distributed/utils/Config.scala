@@ -6,6 +6,8 @@ case class Config(
     masterHost: Option[String],
     masterPort: Option[Int],
     batchSize: Int,
+    learningRate: Double,
+    lambda: Double,
     full: Boolean,
     async: Boolean,
     record: Boolean,

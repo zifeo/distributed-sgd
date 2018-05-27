@@ -36,9 +36,6 @@ object Main extends App {
   import config.async
   log.info("compute: {}", if (async) "async" else "sync")
 
-  // could use another model
-  val model = new SparseSVM(0)
-
   if (config.record) {
     log.info("recording")
     Kamon.addReporter(new InfluxDBReporter())
@@ -51,6 +48,9 @@ object Main extends App {
     case (x, y) => Vec(x, featuresCount) -> y
   }
   log.info("data loaded: {}", data.length)
+
+  // could use another model
+  val model = new SparseSVM(config.lambda, config.learningRate / data.length)
 
   (config.masterHost, config.masterPort) match {
 
