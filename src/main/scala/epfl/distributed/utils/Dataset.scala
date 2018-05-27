@@ -1,13 +1,16 @@
 package epfl.distributed.utils
 
+import epfl.distributed.math.Vec
 import spire.math.Number
 
 import scala.io.Source
 
 object Dataset {
 
+  type Data = Array[(Vec, Int)]
+
   // CCAT transform to -1 or 1
-  def rcv1(folder: String, full: Boolean = true, chunk: Int = 4096): Array[(Map[Int, Number], Int)] = {
+  def rcv1(folder: String, full: Boolean = true, chunk: Int = 4096, featuresCount: Int = 47236): Data = {
 
     def readData(path: String, chunk: Int): Iterator[(Int, Map[Int, Number])] =
       for {
@@ -47,8 +50,8 @@ object Dataset {
 
     for {
       rows <- dataFiles.map(f => readData(f, chunk)).toArray
-      row  <- rows
-    } yield (row._2, labels(row._1))
+      (id, v)  <- rows
+    } yield (Vec(v, featuresCount), labels(id))
   }
 
 }

@@ -44,9 +44,7 @@ object Main extends App {
   log.info("loading data in: {}", config.dataPath)
   val featuresCount = 47236
 
-  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, full = config.full).map {
-    case (x, y) => Vec(x, featuresCount) -> y
-  }
+  val data: Array[(Vec, Int)] = Dataset.rcv1(config.dataPath, full = config.full)
   log.info("data loaded: {}", data.length)
 
   // could use another model
