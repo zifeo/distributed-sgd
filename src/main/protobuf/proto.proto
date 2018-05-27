@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package epfl.distributed.core;
+package epfl.distributed;
 
 import "scalapb/scalapb.proto";
 import "google/protobuf/empty.proto";

@@ -1,6 +1,6 @@
 package epfl.distributed
 
-import epfl.distributed.core.core.{Node, Sparse}
+import epfl.distributed.proto.{Node, Sparse}
 import epfl.distributed.math.Vec
 import io.grpc._
 import scalapb.TypeMapper

@@ -1,8 +1,8 @@
 package epfl.distributed.core
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.core.SlaveGrpc.SlaveStub
-import epfl.distributed.core.core._
+import epfl.distributed.proto.SlaveGrpc.SlaveStub
+import epfl.distributed.proto._
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool

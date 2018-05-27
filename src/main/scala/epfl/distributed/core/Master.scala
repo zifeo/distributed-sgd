@@ -2,8 +2,8 @@ package epfl.distributed.core
 
 import com.google.protobuf.empty.Empty
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.core.SlaveGrpc.SlaveStub
-import epfl.distributed.core.core._
+import epfl.distributed.proto.SlaveGrpc.SlaveStub
+import epfl.distributed.proto._
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
 import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
 import epfl.distributed.math.Vec

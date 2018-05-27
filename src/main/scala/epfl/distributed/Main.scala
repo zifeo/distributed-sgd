@@ -3,7 +3,7 @@ package epfl.distributed
 import java.util.logging.LogManager
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.core.Node
+import epfl.distributed.proto.Node
 import epfl.distributed.core.ml.{EarlyStopping, SparseSVM}
 import epfl.distributed.core.{AsyncMaster, Master, Slave, SyncMaster}
 import epfl.distributed.math.Vec
