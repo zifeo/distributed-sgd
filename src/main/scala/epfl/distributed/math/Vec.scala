@@ -52,9 +52,16 @@ trait Vec {
   def dot(other: Vec): Number = (this * other).sum
 
   def zerosLike: Vec = this match {
-    case _: Dense  => Dense.zeros(this.size)
-    case _: Sparse => Sparse.zeros(this.size)
+    case _: Dense  => Dense.zeros(size)
+    case _: Sparse => Sparse.zeros(size)
   }
+
+  def valueLike(value: Number): Vec = this match {
+    case _: Dense  => Dense.fill(value, size)
+    case _: Sparse => Sparse(map.mapValues(_ => value), size)
+  }
+
+  def onesLike: Vec = valueLike(Number.one)
 
   def sparsity(epsilon: Number = 1e-20): Double = 1 - nonZeroCount(epsilon).toDouble / size
 
