@@ -7,7 +7,7 @@ import spire.math._
   * Sparse Support Vector Machine
   * @param lambda regularized parameter
   */
-class SparseSVM(lambda: Double, val learningRate: Double) {
+class SparseSVM(lambda: Double) {
 
   def apply(w: Vec, x: Vec): Number =
     forward(w, x)

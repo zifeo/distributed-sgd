@@ -3,12 +3,16 @@ package epfl.distributed
 import java.util.logging.LogManager
 
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.core.ml.SparseSVM
-import epfl.distributed.core.{Master, Slave}
+import epfl.distributed.core.ml.{EarlyStopping, SparseSVM}
+import epfl.distributed.core.{Master, MasterAsync, MasterSync, Slave}
+import epfl.distributed.math.Vec
 import epfl.distributed.proto.Node
+import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
 import kamon.Kamon
 import kamon.influxdb.InfluxDBReporter
+
+import scala.concurrent.Future
 
 object Main extends App {
 
@@ -44,16 +48,45 @@ object Main extends App {
   log.info("data loaded: {} ({}s)", data.length, loadDuration)
 
   // could use another model
-  val model = new SparseSVM(config.lambda, config.learningRate / data.length)
+  val model = new SparseSVM(config.lambda)
 
   def scenario(master: Master): Unit = {
 
+    val splitStrategy =
+      (data: Data, nSlaves: Int) => data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
+
     val w0 = data(0)._1.zerosLike
-    val l0 = master.computeLossDistributed(w0).await
+    val l0 = master.distributedLoss(w0).await
     println(l0)
-    val w1 = master.fit(w0, config).await
+
+    val w1 = Measure.durationLog(log, "fit") {
+      val res = master match {
+        case m: MasterAsync =>
+          m.fit(
+              initialWeights = w0,
+              maxEpoch = 1e6.toInt,
+              batchSize = config.batchSize,
+              learningRate = config.learningRate,
+              stoppingCriterion = EarlyStopping.noImprovement(),
+              splitStrategy = splitStrategy,
+              checkEvery = 100,
+              leakLossCoef = 1
+          )
+        case m: MasterSync =>
+          m.fit(
+              initialWeights = w0,
+              maxEpochs = 100,
+              batchSize = config.batchSize,
+              learningRate = config.learningRate,
+              stoppingCriterion = EarlyStopping.noImprovement()
+          )
+      }
+      res.await.grad
+    }
+
     println(w1)
-    val l1 = master.computeLossDistributed(w1).await
+    log.info("final weights: {}", w1)
+    val l1 = master.distributedLoss(w1).await
     println(l1)
 
   }

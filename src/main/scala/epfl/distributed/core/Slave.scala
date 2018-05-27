@@ -29,6 +29,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   private var asyncComputation: CancelableFuture[Unit] = _
   private var assignedSamples: Seq[Int]                = _
   private var batchSize: Int                           = _
+  private var learningRate: Double                     = _
 
   sys.addShutdownHook {
     this.stop()
@@ -73,7 +74,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
         val innerWeights = weights.single()
         val grads        = samples.map { case (x, y) => model.backward(innerWeights, x, y) }
-        val gradUpdate   = model.learningRate * batchSize * Vec.sum(grads)
+        val gradUpdate   = learningRate * Vec.mean(grads)
 
         weights.single.transform(_ - gradUpdate)
 
@@ -122,7 +123,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
           model.backward(w, x, y)
         }
 
-      GradUpdate(model.learningRate * Vec.sum(grad))
+      GradUpdate(Vec.sum(grad))
     }
 
     def initAsync(request: AsyncInit): Future[Ack] = {
@@ -133,10 +134,12 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         runningAsync() = true
         weights() = request.weights
       }
+
       assignedSamples = request.samples
       batchSize = request.batchSize
-      asyncComputation = asyncTask.runAsync(Scheduler(ec: ExecutionContext))
+      learningRate = request.learningRate
 
+      asyncComputation = asyncTask.runAsync(Scheduler(ec: ExecutionContext))
       log.info(s"init async computation, ${request.samples.size} samples assigned, batch size: ${request.batchSize}")
       Future.successful(Ack())
     }

@@ -66,5 +66,6 @@ message AsyncInit {
     Sparse weights = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
     repeated int32 samples = 2;
     int32 batchSize = 3;
+    double learningRate = 4;
 }
 

@@ -19,10 +19,8 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
 
-  protected case class AsyncConfig(initialWeights: Vec,
-                                   maxSteps: Int,
+  protected case class AsyncConfig(maxSteps: Int,
                                    stoppingCriterion: EarlyStopping,
-                                   batchSize: Int,
                                    splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
                                    checkEvery: Int)
 
@@ -30,49 +28,46 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
     * Starts the async computation of the weights
     *
     * @param initialWeights The initial weights
-    * @param earlyStopping A function receiving (initial loss, current loss) and outputting whether to stop the computation
+    * @param stoppingCriterion A function receiving (initial loss, current loss) and outputting whether to stop the computation
     * @param splitStrategy A function from (data, number workers) to a sequence of the assigned samples for each worker
     * @param checkEvery The number of gradient updates received by the master between loss checks
     *
     * @return The computed weights
     */
-  def run(initialWeights: Vec,
-          maxSteps: Int,
-          earlyStopping: EarlyStopping = EarlyStopping.noImprovement(),
+  def fit(initialWeights: Vec,
+          maxEpoch: Int,
           batchSize: Int,
+          learningRate: Double,
+          stoppingCriterion: EarlyStopping,
           splitStrategy: (Array[(Vec, Int)], Int) => Iterable[Seq[Int]],
-          checkEvery: Int = 100): Future[GradState] = {
+          checkEvery: Int,
+          leakLossCoef: Double): Future[GradState] = {
+
     atomic { implicit txn =>
-      if (masterGrpcImpl.running) {
-        Future.failed(new IllegalStateException("Cannot start async computation: a computation is already running"))
-      }
-      else {
-        log.info("starting async computation")
-        val weightsPromise = Promise[GradState]
-        masterGrpcImpl.initState(
-            initialWeights,
-            AsyncConfig(initialWeights, maxSteps, earlyStopping, batchSize, splitStrategy, checkEvery),
-            weightsPromise)
+      require(!masterGrpcImpl.running, "Cannot start async computation: a computation is already running")
 
-        val workers = slaves.values
-        val split   = splitStrategy(data, workers.size)
+      log.info("starting async computation")
+      val weightsPromise = Promise[GradState]
+      masterGrpcImpl
+        .initState(initialWeights, AsyncConfig(maxEpoch, stoppingCriterion, splitStrategy, checkEvery), weightsPromise)
 
-        workers.zip(split).foreach {
-          case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize))
-        }
-        log.info("waiting for slaves updates")
-        masterGrpcImpl
-          .startLossChecking(minStepsBetweenChecks = checkEvery)
-          .runAsync(monix.execution.Scheduler.Implicits.global)
-        weightsPromise.future
+      val workers = slaves.values
+      val split   = splitStrategy(data, workers.size)
+
+      workers.zip(split).foreach {
+        case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize, learningRate))
       }
+      log.info("waiting for slaves updates")
+      masterGrpcImpl
+        .startLossChecking(minStepsBetweenChecks = checkEvery, leakLossCoef)
+        .runAsync(monix.execution.Scheduler.Implicits.global)
+      weightsPromise.future
     }
   }
 
   class AsyncMasterGrpcImpl extends AbstractMasterGrpc {
 
     private val gradState = Ref(GradState.empty)
-    //private val losses    = Ref(ArrayBuffer.empty[Number])
 
     private val bestGrad = Ref(Vec.zeros(1))
     private val bestLoss = Ref(Number(Double.MaxValue))
@@ -91,14 +86,15 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
     def endComputation(): Unit = {
       atomic { implicit txn =>
         slaves.values.foreach(_.stopAsync(Empty()))
-        //losses.set(ArrayBuffer.empty[Number])
 
         promise.complete(Success(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish(bestLoss()))))
         log.info("Async computation ended. Final loss: " + bestLoss())
       }
     }
 
-    def startLossChecking(leakCoef: Double = 1, minStepsBetweenChecks: Long = 100): Task[Unit] = {
+    def startLossChecking(minStepsBetweenChecks: Long, leakCoef: Double): Task[Unit] = {
+      require(0 <= leakCoef && leakCoef <= 1, "leaking coefficient must be between 0 and 1")
+
       def loop(lastStep: Long, losses: List[Number]): Task[Unit] =
         Task.defer {
           if (!running) {
@@ -108,16 +104,16 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
             val innerGradState = gradState.single()
 
             if (innerGradState.updates - lastStep < minStepsBetweenChecks) { //Latest computation was too close
-              log.trace(s"Latest step was too close. Last: $lastStep, current: ${innerGradState.updates}")
+              log.warn(s"Latest step was too close. Last: $lastStep, current: ${innerGradState.updates}")
               loop(lastStep, losses).delayExecution(2.seconds)
             }
             else {
-              val computedLoss = computeLossLocal(innerGradState.grad)
+              val computedLoss = localLoss(innerGradState.grad)
               val loss         = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
               Kamon.counter("master.async.loss").increment(loss.toLong)
 
               atomic { implicit txn =>
-                //For early stopping: set best loss and related gradient
+                // for early stopping: set best loss and related gradient
                 val isBestLoss = bestLoss.transformIfDefined {
                   case oldLoss if oldLoss > loss => loss
                 }
@@ -130,7 +126,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
 
               val newLosses = loss :: losses
 
-              if (asyncConfig.stoppingCriterion(newLosses)) { //We converged => end computation
+              if (asyncConfig.stoppingCriterion(newLosses)) { // converged => end computation
                 log.info("converged to target: stopping computation")
                 Task.now(endComputation())
               }
@@ -154,15 +150,12 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
           log.info("max number of steps reached: stopping computation")
           endComputation()
         }
-
-        Future.successful(Ack())
       }
       else {
         log.debug("Received gradient update after computation ended")
-        Future.successful(Ack())
-        //Future.failed(new IllegalStateException("Master async computation stopped: won't accept any gradient updates"))
       }
 
+      Future.successful(Ack())
     }
   }
 }

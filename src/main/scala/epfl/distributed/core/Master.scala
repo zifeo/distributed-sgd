@@ -54,7 +54,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
   def withClusterReady[T](f: => Future[T]): Future[T] =
     clusterReady.flatMap(_ => f)
 
-  def forward(weights: Vec): Future[Iterable[Number]] =
+  def predict(weights: Vec): Future[Iterable[Number]] =
     withClusterReady {
       Measure.durationLog(log, "forward") {
         val workers = slaves.values
@@ -71,10 +71,11 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
       }
     }
 
-  def backward(epochs: Int,
-               batchSize: Int = 100,
-               initialWeights: Vec,
-               stoppingCriterion: EarlyStopping = EarlyStopping.noImprovement()): Future[GradState] =
+  def fit(initialWeights: Vec,
+          maxEpochs: Int,
+          batchSize: Int,
+          learningRate: Double,
+          stoppingCriterion: EarlyStopping): Future[GradState] =
     withClusterReady {
       Measure.durationLog(log, "backward") {
 
@@ -90,7 +91,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
         def loopEpoch(epoch: Int, epochWeight: GradState, losses: List[Number]): Future[GradState] = {
           losses.headOption.foreach(loss => log.info(s"Loss after epoch ${epoch - 1}: $loss"))
 
-          if (epoch > epochs) {
+          if (epoch > maxEpochs) {
             log.info("Reached max number of epochs: stopping computation")
             Future.successful(epochWeight.finish(losses.head))
           }
@@ -119,13 +120,13 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
                     val grad     = Vec.mean(res.map(_.gradUpdate))
                     val sparsity = 100 * grad.sparsity()
                     log.debug(f"$epoch:$batch sparsity $sparsity%.1f%% duration")
-                    batchWeights - grad
+                    batchWeights - learningRate * grad
                   }
             }
 
             for {
               newEpochWeight <- futureEpochWeight
-              loss           <- computeLossDistributed(newEpochWeight)
+              loss           <- distributedLoss(newEpochWeight)
               newGrad        <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses)
             } yield newGrad
           }
@@ -138,8 +139,8 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
       }
     }
 
-  def computeLossDistributed(weights: Vec): Future[Number] = {
-    val loss = forward(weights)
+  def distributedLoss(weights: Vec): Future[Number] = {
+    val loss = predict(weights)
       .map(
           _.zip(data)
             .map { case (p, (_, y)) => (p - y) ** 2 }
@@ -148,44 +149,23 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
     loss
   }
 
-  def computeLossLocal(weights: Vec, samplesCount: Option[Int] = None): Number = {
-    samplesCount match {
-      case Some(count) =>
-        (1 to count)
-          .map { _ =>
-            val (x, y) = data(Random.nextInt(data.length))
-            (model(weights, x) - y) ** 2
-          }
-          .reduce(_ + _) / count
-
-      case None =>
-        data
-          .map {
-            case (x, y) =>
-              (model(weights, x) - y) ** 2
-          }
-          .reduce(_ + _) / data.length
-    }
+  def localLoss(weights: Vec): Number = {
+    data
+      .map {
+        case (x, y) =>
+          (model(weights, x) - y) ** 2
+      }
+      .reduce(_ + _) / data.length
   }
 
-  def computeLossLocal(weights: Vec, samplesCount: Int): Number = computeLossLocal(weights, Some(samplesCount))
-
-  def fit(w0: Vec, config: Config): Future[Vec] =
-    withClusterReady {
-      Measure.durationLog(log, "fit") {
-        val w1 = this match {
-          case asyncMaster: MasterAsync =>
-            val splitStrategy =
-              (data: Data, nSlaves: Int) => data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
-
-            asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy)
-
-          case syncMaster: MasterSync =>
-            syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize)
-        }
-        w1.map(_.grad)
+  def localSampledLoss(weights: Vec, samplesCount: Int): Number = {
+    (1 to samplesCount)
+      .map { _ =>
+        val (x, y) = data(Random.nextInt(data.length))
+        (model(weights, x) - y) ** 2
       }
-    }
+      .reduce(_ + _) / samplesCount
+  }
 
   abstract class AbstractMasterGrpc extends MasterGrpc.Master {
 
