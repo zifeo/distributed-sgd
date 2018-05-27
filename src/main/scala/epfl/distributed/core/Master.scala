@@ -32,8 +32,6 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
   protected val log    = Logger(s"mastr-${pretty(node)}")
   protected val slaves = TrieMap[Node, SlaveStub]()
 
-  private val batchDuration = Kamon.timer("master.batch.duration")
-
   private val clusterReadyPromise = Promise[Unit]()
   private val clusterReady                = clusterReadyPromise.future
 
@@ -110,7 +108,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
               case (batchWeights, batch) =>
                 log.debug(s"samples ${batch + 1} - ${Math.min(batch + batchSize, piece)} / $piece")
 
-                val timer = batchDuration.start()
+                val timer = Kamon.timer("master.sync.batch.duration").start()
                 val work = workersWithIndex.map {
                   case (worker, i) =>
                     val sample = i * piece + batch
@@ -348,6 +346,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
             else {
               val computedLoss = computeLossLocal(innerGradState.grad)
               val loss         = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
+              Kamon.counter("master.async.loss").increment(loss.toLong)
 
               atomic { implicit txn =>
                 //For early stopping: set best loss and related gradient

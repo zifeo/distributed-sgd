@@ -31,8 +31,6 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
   private val weights = Ref(Vec.zeros(1))
 
-  private val batchCount = Kamon.counter("slave.batch")
-
   sys.addShutdownHook {
     this.stop()
   }
@@ -82,10 +80,10 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
         val gradUpdateRequest = GradUpdate(gradUpdate)
         otherSlaves.values.foreach(_.updateGrad(gradUpdateRequest))
+        Kamon.counter("slave.async.batch").increment()
         masterStub.updateGrad(gradUpdateRequest)
 
         log.trace("update sent")
-        batchCount.increment()
       }
     }
 
