@@ -16,7 +16,7 @@ import scala.util.Random
 class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean) {
 
   implicit val ec: ExecutionContextExecutorService = Pool.newFixedExecutor()
-  private val log                                  = Logger(s"slave--${pretty(node)}")
+  private val log                                  = Logger(s"slave-${pretty(node)}")
   private val server                               = newServer(SlaveGrpc.bindService(new SlaveImpl, ec), node.port)
   private val masterStub                           = MasterGrpc.stub(newChannel(master.host, master.port))
   private val otherSlaves                          = TrieMap[Node, SlaveStub]()
@@ -30,24 +30,27 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
   private val batchCount = Kamon.counter("slave.batch")
 
-  def start(): Unit = {
+  sys.addShutdownHook {
+    this.stop()
+  }
+
+  def start(): Future[Unit] = {
     require(!ec.isShutdown)
     server.start()
     log.info("started")
 
     // register slave node
-    masterStub.registerSlave(node).onComplete { _ =>
+    masterStub.registerSlave(node).map { _ =>
       log.info("registered")
     }
   }
 
-  def stop(): Unit = {
+  def stop(): Future[Unit] = {
     // unregister slave node
-    masterStub.unregisterSlave(node).onComplete { _ =>
+    masterStub.unregisterSlave(node).map { _ =>
       log.info("unregistered")
 
-      server.shutdown()
-      server.awaitTermination()
+      server.shutdown().awaitTermination()
       ec.shutdown()
       log.info("stopped")
     }

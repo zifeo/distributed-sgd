@@ -7,20 +7,20 @@ import epfl.distributed.proto._
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
 import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
 import epfl.distributed.math.Vec
-import epfl.distributed.utils.Pool
+import epfl.distributed.utils.Dataset.Data
+import epfl.distributed.utils.{Config, Pool}
 import io.grpc.Server
 import kamon.Kamon
 import monix.eval.Task
 import spire.math.Number
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContextExecutorService, Future, Promise}
 import scala.util.{Random, Success}
 
-abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) {
+abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, expectedNodeCount: Int) {
 
   protected val masterGrpcImpl: AbstractMasterGrpc
 
@@ -28,12 +28,18 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
 
   // without the lazy, we get an initialized field exception
   private lazy val server: Server = newServer(MasterGrpc.bindService(masterGrpcImpl, ec), node.port)
-  private val slaveJoinCallbacks  = mutable.ListBuffer.empty[Int => Unit]
 
-  protected val log    = Logger(s"master-${pretty(node)}")
+  protected val log    = Logger(s"mastr-${pretty(node)}")
   protected val slaves = TrieMap[Node, SlaveStub]()
 
   private val batchDuration = Kamon.timer("master.batch.duration")
+
+  private val clusterReadyPromise = Promise[Unit]()
+  val clusterReady                = clusterReadyPromise.future
+
+  sys.addShutdownHook {
+    this.stop()
+  }
 
   def start(): Unit = {
     require(!ec.isShutdown)
@@ -42,8 +48,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
   }
 
   def stop(): Unit = {
-    server.shutdown()
-    server.awaitTermination()
+    server.shutdown().awaitTermination()
     ec.shutdown()
     log.info("stopped")
   }
@@ -51,10 +56,6 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
   def awaitTermination(): Unit = {
     log.info("waiting")
     server.awaitTermination()
-  }
-
-  def onSlaveJoin(callback: Int => Unit): Unit = {
-    slaveJoinCallbacks += callback
   }
 
   def forward(weights: Vec): Future[Iterable[Number]] = {
@@ -175,15 +176,30 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
 
   def computeLoss(weights: Vec, samplesCount: Int): Number = computeLoss(weights, Some(samplesCount))
 
+  def fit(w0: Vec, config: Config): Future[Vec] = {
+    clusterReady.flatMap { _ =>
+      val w1 = this match {
+        case asyncMaster: AsyncMaster =>
+          val splitStrategy =
+            (data: Data, nSlaves: Int) => data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
+
+          asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy)
+
+        case syncMaster: SyncMaster =>
+          syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize)
+      }
+      w1.map(_.grad)
+    }
+  }
+
   abstract class AbstractMasterGrpc extends MasterGrpc.Master {
 
     def registerSlave(node: Node): Future[Ack] = {
-      val stub = SlaveGrpc.stub(newChannel(node.host, node.port))
-
       val slavesSnap = slaves.readOnlySnapshot()
-      slaves.put(node, stub)
+      require(slaves.size <= expectedNodeCount, "too many nodes have joined")
 
-      log.info(s"new slave ${pretty(node)}")
+      val stub = SlaveGrpc.stub(newChannel(node.host, node.port))
+      slaves.put(node, stub)
 
       slavesSnap.foreach {
         case (otherNode, otherStub) =>
@@ -191,9 +207,14 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
           stub.registerSlave(otherNode)
       }
 
-      val ack = Future.successful(Ack())
-      ack.onComplete(_ => slaveJoinCallbacks.foreach(_(slavesSnap.size + 1)))
-      ack
+      if (slaves.size >= expectedNodeCount & !clusterReady.isCompleted) {
+        log.info("cluster is now ready ({}/{} slaves, new {})", slaves.size, expectedNodeCount, pretty(node))
+        clusterReadyPromise.trySuccess(())
+      }
+      else {
+        log.info("cluster is waiting ({}/{} slaves, new {})", slaves.size, expectedNodeCount, pretty(node))
+      }
+      Future.successful(Ack())
     }
 
     def unregisterSlave(node: Node): Future[Ack] = {
@@ -208,7 +229,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
   }
 }
 
-class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends AbstractMaster(node, data, model) {
+class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int) extends AbstractMaster(node, data, model, nodeCount) {
 
   override protected val masterGrpcImpl = new SyncMasterGrpcImpl
 
@@ -219,7 +240,7 @@ class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends 
   }
 }
 
-class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends AbstractMaster(node, data, model) {
+class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int) extends AbstractMaster(node, data, model, nodeCount: Int) {
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
 
@@ -402,16 +423,12 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM) extends
 
 object Master {
 
-  def sync(node: Node, data: Array[(Vec, Int)], model: SparseSVM): SyncMaster = new SyncMaster(node, data, model)
-
-  def async(node: Node, data: Array[(Vec, Int)], model: SparseSVM): AsyncMaster = new AsyncMaster(node, data, model)
-
-  def create(node: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean): AbstractMaster = {
+  def apply(node: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean, nodeCount: Int): AbstractMaster = {
     if (async) {
-      new AsyncMaster(node, data, model)
+      new AsyncMaster(node, data, model, nodeCount)
     }
     else {
-      new SyncMaster(node, data, model)
+      new SyncMaster(node, data, model, nodeCount)
     }
   }
 
