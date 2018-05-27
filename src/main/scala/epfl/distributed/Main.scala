@@ -26,7 +26,7 @@ object Main extends App {
 
   // load settings
   val config = pureconfig.loadConfigOrThrow[Config]("dsgd")
-  val node = Node(config.host, config.port)
+  val node   = Node(config.host, config.port)
   log.info("config: {}", config)
 
   if (config.record) {
@@ -35,6 +35,7 @@ object Main extends App {
   }
 
   log.info("loading data in: {}", config.dataPath)
+
   val (data, loadDuration) = Measure.duration {
     Dataset.rcv1(config.dataPath, full = config.full)
   }
@@ -81,9 +82,10 @@ object Main extends App {
     case _ =>
       log.info("launch: master + slaves (dev)")
 
-      val masterNode :: slaveNodes = (0 until (1 + config.nodeCount)).map(i => Node(config.host, config.port + i)).toList
-      val master                   = Master(masterNode, data, model, config.async, config.nodeCount)
-      val slaves                   = slaveNodes.map(n => new Slave(n, masterNode, data, model, config.async))
+      val masterNode :: slaveNodes =
+        (0 until (1 + config.nodeCount)).map(i => Node(config.host, config.port + i)).toList
+      val master = Master(masterNode, data, model, config.async, config.nodeCount)
+      val slaves = slaveNodes.map(n => new Slave(n, masterNode, data, model, config.async))
 
       master.start()
       slaves.foreach(_.start().await)

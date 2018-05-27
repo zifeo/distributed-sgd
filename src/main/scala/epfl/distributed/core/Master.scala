@@ -2,11 +2,11 @@ package epfl.distributed.core
 
 import com.google.protobuf.empty.Empty
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.proto.SlaveGrpc.SlaveStub
-import epfl.distributed.proto._
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
 import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
 import epfl.distributed.math.Vec
+import epfl.distributed.proto.SlaveGrpc.SlaveStub
+import epfl.distributed.proto._
 import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Config, Measure, Pool}
 import io.grpc.Server
@@ -292,10 +292,10 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
         workers.zip(split).foreach {
           case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize))
         }
+        log.info("waiting for slaves updates")
         masterGrpcImpl
           .startLossChecking(minStepsBetweenChecks = checkEvery)
           .runAsync(monix.execution.Scheduler.Implicits.global)
-        log.info("waiting for slaves updates")
         weightsPromise.future
       }
     }
