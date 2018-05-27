@@ -13,7 +13,7 @@ import monix.execution.{CancelableFuture, Scheduler}
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean) {
 
@@ -66,7 +66,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
   def asyncTask: Task[Unit] =
     Task {
-      while (true) {
+      while (runningAsync.single()) {
         val samples = if (batchSize == 1) {
           Seq(data(assignedSamples(Random.nextInt(assignedSamples.size))))
         }
@@ -132,24 +132,23 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     def initAsync(request: AsyncInit): Future[Ack] = {
       require(async, "Cannot initialize async computation: slave is in synchronous mode.")
 
-      atomic { implicit txn =>
-        if (runningAsync()) {
-          Future.failed(
-              new IllegalStateException("Async computation already running, can't be initialized unless stopped first"))
-        }
-        else {
+      if (runningAsync.single()) {
+        Future.failed(
+            new IllegalStateException("Async computation already running, can't be initialized unless stopped first"))
+      }
+      else {
+        log.info(
+            s"initializing async computation. ${request.samples.size} samples assigned. Batch size: ${request.batchSize}")
+        atomic { implicit txn =>
           runningAsync() = true
-
-          log.info(
-              s"initializing async computation. ${request.samples.size} samples assigned. Batch size: ${request.batchSize}")
-
           weights() = request.weights
-          assignedSamples = request.samples
-          batchSize = request.batchSize
-          asyncComputation = asyncTask.runAsync(Scheduler(ec: ExecutionContext))
-
-          Future.successful(Ack())
         }
+        assignedSamples = request.samples
+        batchSize = request.batchSize
+        asyncComputation = asyncTask.runAsync(Scheduler(ec: ExecutionContext))
+
+        Future.successful(Ack())
+
       }
     }
 
@@ -166,8 +165,8 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
       require(async, "Cannot stop async computation: slave is in synchronous mode.")
       log.debug("stopping async computation")
 
-      asyncComputation.cancel()
       runningAsync.single() = false
+      Try(asyncComputation.cancel())
       Future.successful(Ack())
     }
 

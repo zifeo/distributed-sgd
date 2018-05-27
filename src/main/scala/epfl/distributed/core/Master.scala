@@ -2,11 +2,11 @@ package epfl.distributed.core
 
 import com.google.protobuf.empty.Empty
 import com.typesafe.scalalogging.Logger
-import epfl.distributed.proto.SlaveGrpc.SlaveStub
-import epfl.distributed.proto._
 import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
 import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
 import epfl.distributed.math.Vec
+import epfl.distributed.proto.SlaveGrpc.SlaveStub
+import epfl.distributed.proto._
 import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Config, Pool}
 import io.grpc.Server
@@ -229,7 +229,8 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
   }
 }
 
-class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int) extends AbstractMaster(node, data, model, nodeCount) {
+class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
+    extends AbstractMaster(node, data, model, nodeCount) {
 
   override protected val masterGrpcImpl = new SyncMasterGrpcImpl
 
@@ -240,7 +241,8 @@ class SyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCoun
   }
 }
 
-class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int) extends AbstractMaster(node, data, model, nodeCount: Int) {
+class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
+    extends AbstractMaster(node, data, model, nodeCount: Int) {
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
 
@@ -285,10 +287,10 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
         workers.zip(split).foreach {
           case (slave, assignment) => slave.initAsync(AsyncInit(initialWeights, assignment, batchSize))
         }
+        log.info("waiting for slaves updates")
         masterGrpcImpl
           .startLossChecking(minStepsBetweenChecks = checkEvery)
           .runAsync(monix.execution.Scheduler.Implicits.global)
-        log.info("waiting for slaves updates")
         weightsPromise.future
       }
     }
