@@ -8,6 +8,7 @@ case class Config(
     batchSize: Int,
     learningRate: Double,
     lambda: Double,
+    nodeCount: Int,
     full: Boolean,
     async: Boolean,
     record: Boolean,

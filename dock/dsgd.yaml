@@ -61,9 +61,17 @@ spec:
           limits:
             cpu: "4"
             memory: "16Gi"
+        volumeMounts:
+          - name: mnt
+            mountPath: /opt/mnt
       restartPolicy: Always
       imagePullSecrets:
         - name: hub-private
+
+      volumes:
+      - name: mnt
+        persistentVolumeClaim:
+          claimName: cs449g4-scratch
 
 ---
 
@@ -90,7 +98,7 @@ metadata:
 
 spec:
   serviceName: dsgd-slave
-  replicas: 3
+  replicas: 4
   podManagementPolicy: Parallel
 
   selector:
