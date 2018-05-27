@@ -1,6 +1,7 @@
 package epfl.distributed.utils
 
 import scala.concurrent.{ExecutionContext, Future}
+import com.typesafe.scalalogging.Logger
 
 object Measure {
 
@@ -20,6 +21,15 @@ object Measure {
       val dur = currentMs - start
       (res, dur / 1e3)
     }
+  }
+
+  def durationLog[T](log: Logger, name: String)(f: => T): T = {
+    log.info("{} start", name)
+    val start = currentMs
+    val res = f
+    val dur = (currentMs - start) / 1e3
+    log.info("{} end ({}s)", name, dur)
+    res
   }
 
 }

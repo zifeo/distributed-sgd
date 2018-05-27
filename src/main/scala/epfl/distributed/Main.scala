@@ -48,11 +48,11 @@ object Main extends App {
   def scenario(master: AbstractMaster): Unit = {
 
     val w0 = data(0)._1.zerosLike
-    val l0 = master.computeLossDistributed(w0)
+    val l0 = master.computeLossDistributed(w0).await
     print(l0)
     val w1 = master.fit(w0, config).await
     print(w1)
-    val l1 = master.computeLossDistributed(w1)
+    val l1 = master.computeLossDistributed(w1).await
     print(l1)
 
   }
