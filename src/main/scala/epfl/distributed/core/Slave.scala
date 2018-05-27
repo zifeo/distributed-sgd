@@ -44,24 +44,24 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
     // register slave node
     masterStub.registerSlave(node).map { _ =>
-      log.info("registered")
-    }
-  }
-
-  def stop(): Future[Unit] = {
-    // unregister slave node
-    masterStub.unregisterSlave(node).map { _ =>
-      log.info("unregistered")
-
-      server.shutdown().awaitTermination()
-      ec.shutdown()
-      log.info("stopped")
+      log.info("registered to master")
     }
   }
 
   def awaitTermination(): Unit = {
     log.info("waiting")
     server.awaitTermination()
+  }
+
+  def stop(): Future[Unit] = {
+    // unregister slave node
+    masterStub.unregisterSlave(node).map { _ =>
+      log.info("unregistered from master")
+
+      server.shutdown()
+      ec.shutdown()
+      log.info("stopped")
+    }
   }
 
   def asyncTask: Task[Unit] =

@@ -8,7 +8,7 @@ import epfl.distributed.math.Vec
 import epfl.distributed.proto.SlaveGrpc.SlaveStub
 import epfl.distributed.proto._
 import epfl.distributed.utils.Dataset.Data
-import epfl.distributed.utils.{Config, Pool}
+import epfl.distributed.utils.{Config, Measure, Pool}
 import io.grpc.Server
 import kamon.Kamon
 import monix.eval.Task
@@ -35,7 +35,10 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
   private val batchDuration = Kamon.timer("master.batch.duration")
 
   private val clusterReadyPromise = Promise[Unit]()
-  val clusterReady                = clusterReadyPromise.future
+  private val clusterReady                = clusterReadyPromise.future
+
+  def withClusterReady[T](f: => Future[T]): Future[T] =
+    clusterReady.flatMap(_ => f)
 
   sys.addShutdownHook {
     this.stop()
@@ -47,102 +50,105 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
     log.info("started")
   }
 
-  def stop(): Unit = {
-    server.shutdown().awaitTermination()
-    ec.shutdown()
-    log.info("stopped")
-  }
-
   def awaitTermination(): Unit = {
     log.info("waiting")
     server.awaitTermination()
   }
 
-  def forward(weights: Vec): Future[Iterable[Number]] = {
-    val workers = slaves.values
-    val piece   = Math.floorDiv(data.length, workers.size)
-
-    val work = workers.zipWithIndex.map {
-      case (worker, i) =>
-        val sample = i * piece
-        val req    = ForwardRequest(sample until (sample + piece), weights)
-        worker.forward(req)
-    }
-
-    Future.sequence(work).map(_.flatMap(_.predictions))
+  def stop(): Unit = {
+    server.shutdown()
+    ec.shutdown()
+    log.info("stopped")
   }
+
+  def forward(weights: Vec): Future[Iterable[Number]] =
+    withClusterReady {
+      Measure.durationLog(log, "forward") {
+        val workers = slaves.values
+        val piece = Math.floorDiv(data.length, workers.size)
+
+        val work = workers.zipWithIndex.map {
+          case (worker, i) =>
+            val sample = i * piece
+            val req = ForwardRequest(sample until (sample + piece), weights)
+            worker.forward(req)
+        }
+
+        Future.sequence(work).map(_.flatMap(_.predictions))
+      }
+    }
 
   def backward(epochs: Int,
                batchSize: Int = 100,
                initialWeights: Vec,
-               stoppingCriterion: EarlyStopping = EarlyStopping.noImprovement()): Future[GradState] = {
+               stoppingCriterion: EarlyStopping = EarlyStopping.noImprovement()): Future[GradState] =
+    withClusterReady {
+      Measure.durationLog(log, "backward") {
 
-    def loop[T](on: Seq[T])(init: Vec)(apply: (Vec, T) => Future[Vec]): Future[Vec] =
-      on.foldLeft(Future.successful(init)) {
-        case (itWeights, it) =>
-          itWeights.flatMap(w => apply(w, it))
-      }
+        def loop[T](on: Seq[T])(init: Vec)(apply: (Vec, T) => Future[Vec]): Future[Vec] =
+          on.foldLeft(Future.successful(init)) {
+            case (itWeights, it) =>
+              itWeights.flatMap(w => apply(w, it))
+          }
 
-    log.info(s"dsgd start")
+        val workersWithIndex = slaves.values.zipWithIndex
+        val piece = Math.floorDiv(data.length, workersWithIndex.size)
 
-    val workersWithIndex = slaves.values.zipWithIndex
-    val piece            = Math.floorDiv(data.length, workersWithIndex.size)
+        def loopEpoch(epoch: Int, epochWeight: GradState, losses: List[Number]): Future[GradState] = {
+          losses.headOption.foreach(loss => log.info(s"Loss after epoch ${epoch - 1}: $loss"))
 
-    def loopEpoch(epoch: Int, epochWeight: GradState, losses: List[Number]): Future[GradState] = {
-      losses.headOption.foreach(loss => log.info(s"Loss after epoch ${epoch - 1}: $loss"))
+          if (epoch > epochs) {
+            log.info("Reached max number of epochs: stopping computation")
+            Future.successful(epochWeight.finish(losses.head))
+          }
+          else if (stoppingCriterion(losses)) {
+            log.info("Converged to target: stopping computation")
+            Future.successful(epochWeight.finish(losses.head))
+          }
+          else {
+            val futureEpochWeight = loop(0 until piece by batchSize)(epochWeight.grad) { // batch
+              case (batchWeights, batch) =>
+                log.debug(s"samples ${batch + 1} - ${Math.min(batch + batchSize, piece)} / $piece")
 
-      if (epoch > epochs) {
-        log.info("Reached max number of epochs: stopping computation")
-        Future.successful(epochWeight.finish(losses.head))
-      }
-      else if (stoppingCriterion(losses)) {
-        log.info("Converged to target: stopping computation")
-        Future.successful(epochWeight.finish(losses.head))
-      }
-      else {
-        val futureEpochWeight = loop(0 until piece by batchSize)(epochWeight.grad) { // batch
-          case (batchWeights, batch) =>
-            log.debug(s"samples ${batch + 1} - ${Math.min(batch + batchSize, piece)} / $piece")
+                val timer = batchDuration.start()
+                val work = workersWithIndex.map {
+                  case (worker, i) =>
+                    val sample = i * piece + batch
 
-            val timer = batchDuration.start()
-            val work = workersWithIndex.map {
-              case (worker, i) =>
-                val sample = i * piece + batch
-
-                val req =
-                  GradientRequest(batchWeights, sample until Math.min(sample + batchSize, i * piece + piece))
-                worker.gradient(req)
+                    val req =
+                      GradientRequest(batchWeights, sample until Math.min(sample + batchSize, i * piece + piece))
+                    worker.gradient(req)
+                }
+                Future
+                  .sequence(work)
+                  .map { res =>
+                    timer.stop()
+                    val grad = Vec.mean(res.map(_.grad))
+                    val durations = res.map(x => x.terminatedAt - x.startedAt)
+                    val durationMax = durations.max / 1000.0
+                    val durationMin = durations.min / 1000.0
+                    val durationAvg = durations.sum / 1000.0 / durations.size
+                    val sparsity = 100 * grad.sparsity()
+                    log.trace(
+                      f"$epoch:$batch sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
+                    batchWeights - grad
+                  }
             }
-            Future
-              .sequence(work)
-              .map { res =>
-                timer.stop()
-                val grad        = Vec.mean(res.map(_.grad))
-                val durations   = res.map(x => x.terminatedAt - x.startedAt)
-                val durationMax = durations.max / 1000.0
-                val durationMin = durations.min / 1000.0
-                val durationAvg = durations.sum / 1000.0 / durations.size
-                val sparsity    = 100 * grad.sparsity()
-                log.trace(
-                    f"$epoch:$batch sparsity $sparsity%.1f%% duration ($durationMin%.3f, $durationAvg%.3f, $durationMax%.3f)")
-                batchWeights - grad
-              }
+
+            for {
+              newEpochWeight <- futureEpochWeight
+              loss <- computeLossDistributed(newEpochWeight)
+              newGrad <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses)
+            } yield newGrad
+          }
         }
 
-        for {
-          newEpochWeight <- futureEpochWeight
-          loss           <- computeLossDistributed(newEpochWeight)
-          newGrad        <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses)
-        } yield newGrad
+        val result = loopEpoch(1, GradState.start(initialWeights), Nil)
+        //log.debug("Work done, waiting result")
+
+        result
       }
     }
-
-    val result = loopEpoch(1, GradState.start(initialWeights), Nil)
-    //log.debug("Work done, waiting result")
-
-    result.foreach(_ => log.info(s"dsgd end"))
-    result
-  }
 
   def computeLossDistributed(weights: Vec): Future[Number] = {
     val loss = forward(weights)
@@ -154,7 +160,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
     loss
   }
 
-  def computeLoss(weights: Vec, samplesCount: Option[Int] = None): Number = {
+  def computeLossLocal(weights: Vec, samplesCount: Option[Int] = None): Number = {
     samplesCount match {
       case Some(count) =>
         (1 to count)
@@ -174,23 +180,24 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
     }
   }
 
-  def computeLoss(weights: Vec, samplesCount: Int): Number = computeLoss(weights, Some(samplesCount))
+  def computeLossLocal(weights: Vec, samplesCount: Int): Number = computeLossLocal(weights, Some(samplesCount))
 
-  def fit(w0: Vec, config: Config): Future[Vec] = {
-    clusterReady.flatMap { _ =>
-      val w1 = this match {
-        case asyncMaster: AsyncMaster =>
-          val splitStrategy =
-            (data: Data, nSlaves: Int) => data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
+  def fit(w0: Vec, config: Config): Future[Vec] =
+    withClusterReady {
+      Measure.durationLog(log, "fit") {
+          val w1 = this match {
+            case asyncMaster: AsyncMaster =>
+              val splitStrategy =
+                (data: Data, nSlaves: Int) => data.indices.grouped(Math.round(data.length.toFloat / nSlaves)).toSeq
 
-          asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy)
+              asyncMaster.run(w0, 1e6.toInt, EarlyStopping.noImprovement(), config.batchSize, splitStrategy)
 
-        case syncMaster: SyncMaster =>
-          syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize)
+            case syncMaster: SyncMaster =>
+              syncMaster.backward(epochs = 100, initialWeights = w0, batchSize = config.batchSize)
+          }
+          w1.map(_.grad)
       }
-      w1.map(_.grad)
     }
-  }
 
   abstract class AbstractMasterGrpc extends MasterGrpc.Master {
 
@@ -339,7 +346,7 @@ class AsyncMaster(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
               loop(lastStep, losses).delayExecution(2.seconds)
             }
             else {
-              val computedLoss = computeLoss(innerGradState.grad)
+              val computedLoss = computeLossLocal(innerGradState.grad)
               val loss         = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
 
               atomic { implicit txn =>

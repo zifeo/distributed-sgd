@@ -19,5 +19,7 @@ project/plugins/project/
 build
 .env
 data/*
+.ivy2/
+.sbt/
+*.sc
 
-src/main/scala/epfl/distributed/test\.sc
