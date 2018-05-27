@@ -4,7 +4,7 @@ import java.util.logging.LogManager
 
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.ml.SparseSVM
-import epfl.distributed.core.{AbstractMaster, Master, Slave}
+import epfl.distributed.core.{Master, Slave}
 import epfl.distributed.proto.Node
 import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
 import kamon.Kamon
@@ -46,7 +46,7 @@ object Main extends App {
 
   import Pool.AwaitableFuture
 
-  def scenario(master: AbstractMaster): Unit = {
+  def scenario(master: Master): Unit = {
 
     val w0 = data(0)._1.zerosLike
     val l0 = master.computeLossDistributed(w0).await
