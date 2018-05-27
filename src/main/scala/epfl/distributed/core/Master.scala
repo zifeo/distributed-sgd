@@ -9,6 +9,7 @@ import epfl.distributed.core.ml.{EarlyStopping, GradState, SparseSVM}
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
 import io.grpc.Server
+import kamon.Kamon
 import monix.eval.Task
 import spire.math.Number
 
@@ -31,6 +32,8 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
 
   protected val log    = Logger(s"master-${pretty(node)}")
   protected val slaves = TrieMap[Node, SlaveStub]()
+
+  private val batchDuration = Kamon.timer("master.batch.duration")
 
   def start(): Unit = {
     require(!ec.isShutdown)
@@ -100,6 +103,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
           case (batchWeights, batch) =>
             log.debug(s"samples ${batch + 1} - ${Math.min(batch + batchSize, piece)} / $piece")
 
+            val timer = batchDuration.start()
             val work = workersWithIndex.map {
               case (worker, i) =>
                 val sample = i * piece + batch
@@ -111,6 +115,7 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
             Future
               .sequence(work)
               .map { res =>
+                timer.stop()
                 val grad        = Vec.mean(res.map(_.grad))
                 val durations   = res.map(x => x.terminatedAt - x.startedAt)
                 val durationMax = durations.max / 1000.0
@@ -139,11 +144,13 @@ abstract class AbstractMaster(node: Node, data: Array[(Vec, Int)], model: Sparse
   }
 
   def computeLossDistributed(weights: Vec): Future[Number] = {
-    forward(weights)
+    val loss = forward(weights)
       .map(
           _.zip(data)
             .map { case (p, (_, y)) => (p - y) ** 2 }
             .reduce(_ + _) / data.length)
+
+    loss
   }
 
   def computeLoss(weights: Vec, samplesCount: Option[Int] = None): Number = {

@@ -6,6 +6,7 @@ import epfl.distributed.core.core._
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
 import epfl.distributed.utils.Pool
+import kamon.Kamon
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.stm._
@@ -26,6 +27,8 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   private var batchSize: Int            = _
 
   private val weights = Ref(Vec.zeros(1))
+
+  private val batchCount = Kamon.counter("slave.batch")
 
   def start(): Unit = {
     require(!ec.isShutdown)
@@ -75,6 +78,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         masterStub.updateGrad(gradUpdateRequest)
 
         log.trace("update sent")
+        batchCount.increment()
 
         true //Still running in async mode
       }
@@ -115,7 +119,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     }
 
     def gradient(request: GradientRequest): Future[GradientReply] = Future {
-      val receivedAt                           = System.currentTimeMillis()
+      val receivedAt                     = System.currentTimeMillis()
       val GradientRequest(w, samplesIdx) = request
 
       val grad = samplesIdx
