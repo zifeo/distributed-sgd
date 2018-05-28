@@ -79,25 +79,33 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
   def asyncTask: Task[Unit] =
     Task {
       while (runningAsync.single()) {
-        val samples = if (batchSize == 1) {
-          Seq(data(assignedSamples(Random.nextInt(assignedSamples.size))))
+        Measure.durationLog(log, "async backward") {
+          val samples = if (batchSize == 1) {
+            Seq(data(assignedSamples(Random.nextInt(assignedSamples.size))))
+          }
+          else {
+            Random.shuffle[Int, IndexedSeq](assignedSamples.indices) take batchSize map data
+          }
+
+          val counter = Kamon.counter("slave.async.backward")
+
+          val innerWeights = weights.single()
+          val grads = samples.map {
+            case (x, y) =>
+              counter.increment()
+              model.backward(innerWeights, x, y)
+          }
+          val gradUpdate = learningRate * Vec.mean(grads)
+
+          weights.single.transform(_ - gradUpdate)
+
+          val gradUpdateRequest = GradUpdate(gradUpdate)
+          otherSlaves.values.foreach(_.updateGrad(gradUpdateRequest))
+          masterStub.updateGrad(gradUpdateRequest)
+
+          Kamon.counter("slave.async.batch").increment()
+          log.trace("update sent")
         }
-        else {
-          Random.shuffle[Int, IndexedSeq](assignedSamples.indices) take batchSize map data
-        }
-
-        val innerWeights = weights.single()
-        val grads        = samples.map { case (x, y) => model.backward(innerWeights, x, y) }
-        val gradUpdate   = learningRate * Vec.mean(grads)
-
-        weights.single.transform(_ - gradUpdate)
-
-        val gradUpdateRequest = GradUpdate(gradUpdate)
-        otherSlaves.values.foreach(_.updateGrad(gradUpdateRequest))
-        masterStub.updateGrad(gradUpdateRequest)
-
-        Kamon.counter("slave.async.batch").increment()
-        log.trace("update sent")
       }
     }
 
@@ -119,7 +127,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
     def forward(request: ForwardRequest): Future[ForwardReply] = Future {
       val ForwardRequest(samplesIdx, w) = request
-      val counter = Kamon.counter("slave.sync.forward")
+      val counter                       = Kamon.counter("slave.sync.forward")
 
       val preds = samplesIdx.map { idx =>
         val (x, y) = data(idx)
@@ -131,9 +139,9 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     }
 
     def gradient(request: GradientRequest): Future[GradUpdate] = Future {
-      Measure.durationLog(log, "gradient") {
+      Measure.durationLog(log, "sync backward") {
         val GradientRequest(w, samplesIdx) = request
-        val counter = Kamon.counter("slave.sync.gradient")
+        val counter                        = Kamon.counter("slave.sync.backward")
 
         val grad = samplesIdx
           .map { idx =>
@@ -168,6 +176,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
       require(async, "Cannot update gradient: slave is in synchronous mode.")
 
       weights.single.transform(_ - request.gradUpdate)
+      Kamon.counter("slave.async.grad.update").increment()
 
       log.trace("update received")
       Future.successful(Ack())

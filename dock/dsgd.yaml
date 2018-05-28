@@ -6,7 +6,7 @@ metadata:
 
 data:
   DSGD_FULL: "false"
-  DSGD_ASYNC: "false"
+  DSGD_ASYNC: "true"
   DSGD_RECORD: "true"
   DSGD_DATA_PATH: "/opt/mnt/datasets"
   DSGD_BATCH_SIZE: "500"

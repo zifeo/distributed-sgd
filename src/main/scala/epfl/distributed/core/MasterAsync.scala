@@ -110,7 +110,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
               loop(lastStep, losses).delayExecution(2.seconds)
             }
             else {
-              val computedLoss = localLoss(innerGradState.grad)
+              val computedLoss = localSampledLoss(innerGradState.grad, 1000)
               val loss         = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
               Kamon.counter("master.async.loss").increment(loss.toLong)
 
