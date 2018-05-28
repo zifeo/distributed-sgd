@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: dsgd-config
+
+data:
+  DSGD_FULL: "false"
+  DSGD_ASYNC: "false"
+  DSGD_RECORD: "false"
+  DSGD_DATA_PATH: "/opt/mnt/datasets"
+  DSGD_BATCH_SIZE: "200"
+  DSGD_LEARNING_RATE: "0.5"
+  DSGD_LAMBDA: "0.00001"
+  DSGD_NODE_COUNT: "4"
+  DSGD_MASTER_PORT: "46746"
+  DSGD_NODE_PORT: "46746"
+  DSGD_MAX_EPOCHS: "10"
+  DSGD_PATIENCE: "5"
+  DSGD_CONV_DELTA: "0.001"

@@ -9,6 +9,3 @@ curl http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a08-topic-qrels
 
 gunzip lyrl2004_vectors_*
 gunzip rcv1-v2.topics.qrels.gz
-
-mkdir -p data
-mv lyrl2004_vectors_* rcv1-v2.topics.qrels data
