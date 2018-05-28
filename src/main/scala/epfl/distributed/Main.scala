@@ -12,6 +12,8 @@ import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
 import kamon.Kamon
 import kamon.influxdb.InfluxDBReporter
 
+import scala.util.Random
+
 object Main extends App {
 
   import Pool.AwaitableFuture
@@ -26,6 +28,7 @@ object Main extends App {
     val memory = Runtime.getRuntime.maxMemory()
     log.info("cores: {}", cores)
     log.info("mem: {}G", if (memory != Long.MaxValue) memory / 1e9 else -1)
+    Random.setSeed(0)
   }
 
   // load settings
@@ -66,7 +69,11 @@ object Main extends App {
               maxEpoch = config.maxEpochs,
               batchSize = config.batchSize,
               learningRate = config.learningRate,
-              stoppingCriterion = EarlyStopping.noImprovement(),
+              stoppingCriterion = EarlyStopping.noImprovement(
+                  patience = config.patience,
+                  minDelta = config.convDelta,
+                  minSteps = None
+              ),
               splitStrategy = ss,
               checkEvery = config.gossipInterval,
               leakLossCoef = config.leakyLoss
@@ -77,7 +84,11 @@ object Main extends App {
               maxEpochs = config.maxEpochs,
               batchSize = config.batchSize,
               learningRate = config.learningRate,
-              stoppingCriterion = EarlyStopping.noImprovement(),
+              stoppingCriterion = EarlyStopping.noImprovement(
+                patience = config.patience,
+                minDelta = config.convDelta,
+                minSteps = None
+              ),
               splitStrategy = ss
           )
       }

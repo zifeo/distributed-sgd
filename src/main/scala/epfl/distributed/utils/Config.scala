@@ -17,5 +17,7 @@ case class Config(
     dataPath: String,
     maxEpochs: Int,
     gossipInterval: Int,
-    leakyLoss: Double
+    leakyLoss: Double,
+    convDelta: Double,
+    patience: Int
 )
