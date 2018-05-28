@@ -44,7 +44,7 @@ trap sigint INT
 
 kubectl create -f $CONFIG
 kubectl create -f kube/dsgd.yaml
-MASTER_POD=$(kubectl get po -l app=dsgd-master -o go-template --template '{{range .items}}{{.metadata.name}}{{end}}')
+MASTER_POD=$(kubectl get pods -l app=dsgd-master -o go-template --template '{{ with index .items 0 }}{{ .metadata.name }}{{ end }}')
 sleep 2
 
 while true
