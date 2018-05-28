@@ -89,7 +89,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
       atomic { implicit txn =>
         slaves.values.foreach(_.stopAsync(Empty()))
 
-        promise.complete(Success(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish(bestLoss()))))
+        promise.trySuccess(gradState.transformAndGet(_.replaceGrad(bestGrad()).finish(bestLoss())))
         log.info("Async computation ended. Final loss: " + bestLoss())
       }
     }
