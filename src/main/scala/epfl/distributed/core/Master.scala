@@ -6,6 +6,7 @@ import epfl.distributed.core.ml.{GradState, SparseSVM, SplitStrategy}
 import epfl.distributed.math.Vec
 import epfl.distributed.proto.SlaveGrpc.SlaveStub
 import epfl.distributed.proto._
+import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Measure, Pool}
 import io.grpc.Server
 import kamon.Kamon
@@ -92,23 +93,24 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
       }
   }
 
-  def localAccuracy(weights: Vec, testData: Option[Array[(Vec, Int)]] = None): Double = {
-    testData.getOrElse(data).count { case (x, y) => model.predictLabel(weights, x) == y }.toDouble / data.length
+  def localAccuracy(weights: Vec, testData: Option[Data] = None): Double = {
+    val workingData = testData.getOrElse(data)
+    workingData.count { case (x, y) => model.forward(weights, x) === y }.toDouble / workingData.length
   }
 
-  def localLoss(weights: Vec, testData: Option[Array[(Vec, Int)]] = None): Number = {
+  def localLoss(weights: Vec, testData: Option[Data] = None): Number = {
     model.loss(weights, testData.getOrElse(data))
   }
 
-  def localSampledLoss(weights: Vec, samplesCount: Int, testData: Option[Array[(Vec, Int)]] = None): Number = {
+  def localSampledLoss(weights: Vec, samplesCount: Int, testData: Option[Data] = None): Number = {
     val workingData = testData.getOrElse(data)
     model.loss(weights, Random.shuffle[Int, IndexedSeq](workingData.indices) take samplesCount map workingData)
   }
 
-  def localSampledAccuracy(weights: Vec, samplesCount: Int, testData: Option[Array[(Vec, Int)]] = None): Number = {
+  def localSampledAccuracy(weights: Vec, samplesCount: Int, testData: Option[Data] = None): Number = {
     val workingData = testData.getOrElse(data)
     val samples = Random.shuffle[Int, IndexedSeq](workingData.indices) take samplesCount map workingData
-    samples.count { case (x, y) => model.predictLabel(weights, x) == y }.toDouble / samples.length
+    samples.count { case (x, y) => model.forward(weights, x) === y }.toDouble / samples.length
   }
 
   def fit(initialWeights: Vec,

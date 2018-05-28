@@ -22,8 +22,6 @@ class SparseSVM(val lambda: Number, val dimSparsity: Vec) {
       .map { case (x, y) => loss(w, x, y) }
       .reduce(_ + _) / samples.size
 
-  def predictLabel(w: Vec, x: Vec): Int = if (forward(w, x) >= zero) 1 else -1
-
   // compute the gradient
   def backward(w: Vec, x: Vec, y: Int): Vec = {
     val activity = y * x.dot(w)
