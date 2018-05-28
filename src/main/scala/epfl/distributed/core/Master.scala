@@ -6,7 +6,6 @@ import epfl.distributed.core.ml.{GradState, SparseSVM, SplitStrategy}
 import epfl.distributed.math.Vec
 import epfl.distributed.proto.SlaveGrpc.SlaveStub
 import epfl.distributed.proto._
-import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Measure, Pool}
 import io.grpc.Server
 import kamon.Kamon
@@ -75,7 +74,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
       _.count {
         case (i, p) =>
           val (_, y) = data(i)
-          val label  = if (p > 0) 1 else -1
+          val label  = if (p >= Number.zero) 1 else -1
 
           label == y
       }.toDouble / data.length
@@ -85,38 +84,26 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
   def distributedLoss(weights: Vec, splitStrategy: SplitStrategy): Future[Number] = {
     predict(weights, splitStrategy)
       .map { preds =>
-        preds.map {
-          case (i, p) =>
-            val (_, y) = data(i)
-            (p - y) ** 2
-        }.reduce(_ + _) / preds.size
+        model.lambda * weights.normSquared + preds
+          .map {
+            case (i, p) =>
+              val (_, y) = data(i)
+              model.loss(p, y)
+          }
+          .reduce(_ + _) / preds.size
       }
   }
 
   def localAccuracy(weights: Vec): Double = {
-    data.count {
-      case (x, y) =>
-        val label = if (model(weights, x) >= Number.zero) 1 else -1
-        label == y
-    }.toDouble / data.length
+    data.count { case (x, y) => model.predictLabel(weights, x) == y }.toDouble / data.length
   }
 
   def localLoss(weights: Vec): Number = {
-    data
-      .map {
-        case (x, y) =>
-          (model(weights, x) - y) ** 2
-      }
-      .reduce(_ + _) / data.length
+    model.loss(weights, data)
   }
 
   def localSampledLoss(weights: Vec, samplesCount: Int): Number = {
-    (1 to samplesCount)
-      .map { _ =>
-        val (x, y) = data(Random.nextInt(data.length))
-        (model(weights, x) - y) ** 2
-      }
-      .reduce(_ + _) / samplesCount
+    model.loss(weights, Random.shuffle[Int, IndexedSeq](data.indices) take samplesCount map data)
   }
 
   def fit(initialWeights: Vec,

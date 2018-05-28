@@ -5,9 +5,7 @@ import java.util.logging.LogManager
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.ml.{EarlyStopping, SparseSVM, SplitStrategy}
 import epfl.distributed.core.{Master, MasterAsync, MasterSync, Slave}
-import epfl.distributed.math.{Dense, Sparse, Vec}
 import epfl.distributed.proto.Node
-import epfl.distributed.utils.Dataset.Data
 import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
 import kamon.Kamon
 import kamon.influxdb.InfluxDBReporter
@@ -85,9 +83,9 @@ object Main extends App {
               batchSize = config.batchSize,
               learningRate = config.learningRate,
               stoppingCriterion = EarlyStopping.noImprovement(
-                patience = config.patience,
-                minDelta = config.convDelta,
-                minSteps = None
+                  patience = config.patience,
+                  minDelta = config.convDelta,
+                  minSteps = None
               ),
               splitStrategy = ss
           )

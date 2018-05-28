@@ -132,7 +132,7 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
       val preds = samplesIdx.map { idx =>
         val (x, y) = data(idx)
         counter.increment()
-        model(w, x)
+        model.forward(w, x)
       }
 
       ForwardReply(preds)
