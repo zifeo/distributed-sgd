@@ -19,12 +19,12 @@ object SparseBench extends Bench.LocalTime {
   //val data = Gen.enumeration("data")(Dataset.rcv1(30): _*)
   //val data = Dataset.rcv1("data", false)
 
-  val sparseVectors = Gen.single[Array[Vec]]("Sparse")(Dataset.rcv1("data", false, vecFactory = Sparse.apply).map {
+  val sparseVectors = Gen.single[Array[Vec]]("Sparse")(Dataset.rcv1("data", false, vecFactory = Sparse.apply).take(100).map {
     case (x, _) => x
   })
 
   val sparseArrayVectors =
-    Gen.single[Array[Vec]]("Sparse array")(Dataset.rcv1("data", false, vecFactory = SparseArrayVector.apply).map {
+    Gen.single[Array[Vec]]("Sparse array")(Dataset.rcv1("data", false, vecFactory = SparseArrayVector.apply).take(100).map {
       case (x, _) => x
     })
 

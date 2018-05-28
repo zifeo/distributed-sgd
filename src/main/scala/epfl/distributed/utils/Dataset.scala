@@ -55,7 +55,7 @@ object Dataset {
     for {
       rows    <- dataFiles.map(f => readData(f, chunk)).toArray
       (id, v) <- rows
-    } yield (Vec(v, featuresCount), labels(id))
+    } yield (vecFactory(v, featuresCount), labels(id))
   }
 
 }
