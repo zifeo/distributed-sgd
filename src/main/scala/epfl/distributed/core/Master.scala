@@ -105,6 +105,12 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
     model.loss(weights, Random.shuffle[Int, IndexedSeq](workingData.indices) take samplesCount map workingData)
   }
 
+  def localSampledAccuracy(weights: Vec, samplesCount: Int, testData: Option[Array[(Vec, Int)]] = None): Number = {
+    val workingData = testData.getOrElse(data)
+    val samples = Random.shuffle[Int, IndexedSeq](workingData.indices) take samplesCount map workingData
+    samples.count { case (x, y) => model.predictLabel(weights, x) == y }.toDouble / samples.length
+  }
+
   def fit(initialWeights: Vec,
           maxEpochs: Int,
           batchSize: Int,
