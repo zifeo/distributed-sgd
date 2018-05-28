@@ -52,7 +52,7 @@ scalacOptions in (Compile, console) --= List(
     "-Ywarn-unused:imports",
     "-Xfatal-warnings"
 )
-javaOptions ++= List("-Xms3G", "-Xmx12G")
+javaOptions ++= List("-Xms10G", "-Xmx12G")
 
 resolvers += Resolver.sonatypeRepo("releases")
 libraryDependencies ++= List(

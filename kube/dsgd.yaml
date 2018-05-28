@@ -53,6 +53,9 @@ spec:
           limits:
             cpu: "4"
             memory: "16Gi"
+          requests:
+            cpu: "4"
+            memory: "16Gi"
         volumeMounts:
           - name: mnt
             mountPath: /opt/mnt
@@ -118,6 +121,9 @@ spec:
         imagePullPolicy: Always
         resources:
           limits:
+            cpu: "4"
+            memory: "16Gi"
+          requests:
             cpu: "4"
             memory: "16Gi"
         volumeMounts:

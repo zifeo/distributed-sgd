@@ -12,7 +12,7 @@ data:
   DSGD_BATCH_SIZE: "200"
   DSGD_LEARNING_RATE: "0.5"
   DSGD_LAMBDA: "0.00001"
-  DSGD_NODE_COUNT: "4"
+  DSGD_NODE_COUNT: "4" # change replica in dsgd.yaml as well
   DSGD_MASTER_PORT: "46746"
   DSGD_NODE_PORT: "46746"
   DSGD_MAX_EPOCHS: "10"
