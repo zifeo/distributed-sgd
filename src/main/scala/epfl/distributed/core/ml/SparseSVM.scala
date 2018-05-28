@@ -10,10 +10,8 @@ import spire.math.Number.{zero, one}
   */
 class SparseSVM(val lambda: Number) {
 
-  //def apply(w: Vec, x: Vec): Number = forward(w, x)
-
   // compute the prediction
-  def forward(w: Vec, x: Vec): Number = x dot w //(1 - x.dot(w)) max 0
+  def forward(w: Vec, x: Vec): Number = (x dot w).signum * -one
 
   def loss(pred: Number, y: Int): Number = max(zero, one - y * pred)
 
@@ -28,9 +26,8 @@ class SparseSVM(val lambda: Number) {
   // compute the gradient
   def backward(w: Vec, x: Vec, y: Int): Vec = {
     val activity    = y * x.dot(w)
-    val subgradient = if (activity < 0) w.zerosLike else x * y
-
-    subgradient
+    val sub = if (activity < 0) w.zerosLike else x * y
+    sub// TEO + regularize(sub, w)
   }
 
   def regularize(grad: Vec, w: Vec): Vec = grad + grad.valueLike(lambda * 2.0 * w.sum)

@@ -70,14 +70,12 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
     }
 
   def distributedAccuracy(weights: Vec, splitStrategy: SplitStrategy): Future[Double] = {
-    predict(weights, splitStrategy).map {
-      _.count {
+    predict(weights, splitStrategy).map { preds =>
+      preds.count {
         case (i, p) =>
           val (_, y) = data(i)
-          val label  = if (p >= Number.zero) 1 else -1
-
-          label == y
-      }.toDouble / data.length
+          p === y
+      }.toDouble / preds.size
     }
   }
 
@@ -140,10 +138,14 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
 
           if (epoch >= maxEpochs) {
             log.info("Reached max number of epochs: stopping computation")
+            log.info("Losses: {}", losses.reverse.mkString(", "))
+            log.info("Accuracies: {}", accs.reverse.mkString(", "))
             Future.successful(epochWeight.finish(losses.head))
           }
           else if (stoppingCriterion(losses)) {
             log.info("Converged to target: stopping computation")
+            log.info("Losses: {}", losses.reverse.mkString(", "))
+            log.info("Accuracies: {}", accs.reverse.mkString(", "))
             Future.successful(epochWeight.finish(losses.head))
           }
           else {
