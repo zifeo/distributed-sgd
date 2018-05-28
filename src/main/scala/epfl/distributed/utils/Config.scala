@@ -1,7 +1,5 @@
 package epfl.distributed.utils
 
-import epfl.distributed.Main.config
-
 case class Config(
     host: String,
     port: Int,
@@ -16,7 +14,7 @@ case class Config(
     record: Boolean,
     dataPath: String,
     maxEpochs: Int,
-    gossipInterval: Int,
+    checkEvery: Int,
     leakyLoss: Double,
     convDelta: Double,
     patience: Int

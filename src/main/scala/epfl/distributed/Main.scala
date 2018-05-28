@@ -73,7 +73,7 @@ object Main extends App {
                   minSteps = None
               ),
               splitStrategy = ss,
-              checkEvery = config.gossipInterval,
+              checkEvery = config.checkEvery,
               leakLossCoef = config.leakyLoss
           )
         case m: MasterSync =>

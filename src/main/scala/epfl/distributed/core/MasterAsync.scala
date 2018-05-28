@@ -75,12 +75,12 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
     @inline def running: Boolean = gradState.single().end.isEmpty
 
     def initState(initialWeights: Vec,
-                  initMaxSteps: Int,
+                  initMaxEpochs: Int,
                   initStoppingCriterion: EarlyStopping,
                   weightsPromise: Promise[GradState]): Unit = {
       gradState.single() = GradState.start(initialWeights)
       promise = weightsPromise
-      maxSteps = initMaxSteps
+      maxSteps = data.length * initMaxEpochs
       stoppingCriterion = initStoppingCriterion
     }
 
@@ -106,7 +106,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
 
             if (innerGradState.updates - lastStep < minStepsBetweenChecks) { //Latest computation was too close
               log.warn(s"Latest step was too close. Last: $lastStep, current: ${innerGradState.updates}")
-              loop(lastStep, losses).delayExecution(2.seconds)
+              loop(lastStep, losses).delayExecution(2.seconds + 500.millis)
             }
             else {
               val computedLoss = localSampledLoss(innerGradState.grad, 1000)
