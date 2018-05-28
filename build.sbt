@@ -68,7 +68,7 @@ libraryDependencies ++= List(
     "org.scala-stm"              %% "scala-stm"            % "0.8",
     "io.monix"                   %% "monix-eval"           % "3.0.0-RC1",
     "org.scalatest"              %% "scalatest"            % "3.0.5" % "test",
-    "com.storm-enroute"          %% "scalameter"           % "0.9" % "test",
+    "com.storm-enroute"          %% "scalameter"           % "0.10.1" % "test",
     "io.kamon"                   %% "kamon-core"           % "1.1.2",
     "io.kamon"                   %% "kamon-executors"      % "1.0.1",
     "io.kamon"                   %% "kamon-influxdb"       % "1.0.1"
