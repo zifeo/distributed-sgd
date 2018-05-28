@@ -92,16 +92,17 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
       }
   }
 
-  def localAccuracy(weights: Vec): Double = {
-    data.count { case (x, y) => model.predictLabel(weights, x) == y }.toDouble / data.length
+  def localAccuracy(weights: Vec, testData: Option[Array[(Vec, Int)]] = None): Double = {
+    testData.getOrElse(data).count { case (x, y) => model.predictLabel(weights, x) == y }.toDouble / data.length
   }
 
-  def localLoss(weights: Vec): Number = {
-    model.loss(weights, data)
+  def localLoss(weights: Vec, testData: Option[Array[(Vec, Int)]] = None): Number = {
+    model.loss(weights, testData.getOrElse(data))
   }
 
-  def localSampledLoss(weights: Vec, samplesCount: Int): Number = {
-    model.loss(weights, Random.shuffle[Int, IndexedSeq](data.indices) take samplesCount map data)
+  def localSampledLoss(weights: Vec, samplesCount: Int, testData: Option[Array[(Vec, Int)]] = None): Number = {
+    val workingData = testData.getOrElse(data)
+    model.loss(weights, Random.shuffle[Int, IndexedSeq](workingData.indices) take samplesCount map workingData)
   }
 
   def fit(initialWeights: Vec,

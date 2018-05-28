@@ -46,6 +46,8 @@ object Main extends App {
   }
   log.info("data loaded: {} ({}s)", data.length, loadDuration)
 
+  val (trainData, testData) = data.splitAt((data.length * 0.8).toInt)
+
   // could use another model
   val model = new SparseSVM(config.lambda)
 
@@ -94,10 +96,10 @@ object Main extends App {
     }
 
     log.info("final weights: {}", w1.map.map { case (idx, n) => s"$idx:$n" }.mkString(" "))
-    val l1 = master.distributedLoss(w1, ss).await
-    log.info("final loss: {}", l1)
-    val a1 = master.distributedAccuracy(w1, ss).await
-    log.info("final accuracy: {}", a1)
+    val l1 = master.localLoss(w1, Some(testData))
+    log.info("final test loss: {}", l1)
+    val a1 = master.localAccuracy(w1, Some(testData))
+    log.info("final test accuracy: {}", a1)
 
   }
 
@@ -106,7 +108,7 @@ object Main extends App {
     case (Some(masterHost), Some(masterPort)) if masterHost == node.host && masterPort == node.port =>
       log.info("launch: only master")
 
-      val master = Master(node, data, model, config.async, config.nodeCount)
+      val master = Master(node, trainData, model, config.async, config.nodeCount)
       master.start()
 
       scenario(master)
@@ -117,7 +119,7 @@ object Main extends App {
       log.info("launch: only slave")
 
       val masterNode = Node(masterHost, masterPort)
-      val slave      = new Slave(node, masterNode, data, model, config.async)
+      val slave      = new Slave(node, masterNode, trainData, model, config.async)
       slave.start()
 
       slave.awaitTermination()
@@ -127,8 +129,8 @@ object Main extends App {
 
       val masterNode :: slaveNodes =
         (0 until (1 + config.nodeCount)).map(i => Node(config.host, config.port + i)).toList
-      val master = Master(masterNode, data, model, config.async, config.nodeCount)
-      val slaves = slaveNodes.map(n => new Slave(n, masterNode, data, model, config.async))
+      val master = Master(masterNode, trainData, model, config.async, config.nodeCount)
+      val slaves = slaveNodes.map(n => new Slave(n, masterNode, trainData, model, config.async))
 
       master.start()
       slaves.foreach(_.start().await)
