@@ -6,8 +6,8 @@ import epfl.distributed.proto._
 
 import scala.concurrent.Future
 
-class MasterSync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
-    extends Master(node, data, model, nodeCount) {
+class MasterSync(node: Node, data: Array[(Vec, Int)], testData: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
+    extends Master(node, data, testData, model, nodeCount) {
 
   override protected val masterGrpcImpl = new SyncMasterGrpcImpl
 

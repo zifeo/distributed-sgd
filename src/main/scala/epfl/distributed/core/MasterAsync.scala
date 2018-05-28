@@ -14,8 +14,8 @@ import scala.concurrent.duration._
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
-    extends Master(node, data, model, nodeCount: Int) {
+class MasterAsync(node: Node, data: Array[(Vec, Int)], testData: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
+    extends Master(node, data, testData, model, nodeCount: Int) {
 
   override protected val masterGrpcImpl = new AsyncMasterGrpcImpl
 
@@ -96,7 +96,11 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
     def startLossChecking(minStepsBetweenChecks: Long, leakCoef: Double): Task[Unit] = {
       require(0 <= leakCoef && leakCoef <= 1, "leaking coefficient must be between 0 and 1")
 
-      def loop(lastStep: Long, losses: List[Number], accs: List[Number]): Task[Unit] =
+      def loop(lastStep: Long,
+               losses: List[Number],
+               accs: List[Double],
+               testLosses: List[Number],
+               testAccs: List[Double]): Task[Unit] =
         Task.defer {
           if (!running) {
             Task.unit
@@ -106,13 +110,18 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
 
             if (innerGradState.updates - lastStep < minStepsBetweenChecks) { //Latest computation was too close
               log.warn(s"Latest step was too close. Last: $lastStep, current: ${innerGradState.updates}")
-              loop(lastStep, losses, accs).delayExecution(2.seconds + 500.millis)
+              loop(lastStep, losses, accs, testLosses, testAccs).delayExecution(2.seconds + 500.millis)
             }
             else {
-              val computedLoss = localSampledLoss(innerGradState.grad, 1000)
-              val computedAccs = localSampledAccuracy(innerGradState.grad, 1000)
-              val loss         = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
-              val acc          = leakCoef * computedAccs + (1 - leakCoef) * accs.headOption.getOrElse(computedAccs)
+              val computedLoss     = localLoss(innerGradState.grad)
+              val computedLossTest = localLoss(innerGradState.grad, Some(testData))
+              val computedAcc      = localAccuracy(innerGradState.grad)
+              val computedAccTest  = localAccuracy(innerGradState.grad, Some(testData))
+              val loss             = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
+              val lossTest = leakCoef * computedLossTest + (1 - leakCoef) * testLosses.headOption.getOrElse(
+                  computedLossTest)
+              val acc     = leakCoef * computedAcc + (1 - leakCoef) * accs.headOption.getOrElse(computedAcc)
+              val accTest = leakCoef * computedAccTest + (1 - leakCoef) * testAccs.headOption.getOrElse(computedAccTest)
               Kamon.counter("master.async.loss").increment(loss.toLong)
 
               atomic { implicit txn =>
@@ -127,23 +136,27 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
                 log.info(s"Steps: ${innerGradState.updates}, loss: $loss")
               }
 
-              val newLosses = loss :: losses
-              val newAccs   = acc :: accs
+              val newLosses     = loss :: losses
+              val newLossesTest = lossTest :: testLosses
+              val newAccs       = acc :: accs
+              val newAccsTest   = accTest :: testAccs
 
-              if (stoppingCriterion(newLosses)) { // converged => end computation
+              if (stoppingCriterion(newLossesTest)) { // converged => end computation
                 log.info("converged to target: stopping computation")
-                log.info("Losses: {}", losses.reverse.mkString(", "))
-                log.info("Accuracies: {}", accs.reverse.mkString(", "))
+                log.info("Losses: {}", newLosses.reverse.mkString(", "))
+                log.info("Test Losses: {}", newLossesTest.reverse.mkString(", "))
+                log.info("Accuracies: {}", newAccs.reverse.mkString(", "))
+                log.info("Accuracies: {}", newAccsTest.reverse.mkString(", "))
                 Task.now(endComputation())
               }
               else {
-                loop(innerGradState.updates, newLosses, newAccs)
+                loop(innerGradState.updates, newLosses, newAccs, newLossesTest, newAccsTest)
               }
             }
           }
         }
 
-      loop(-minStepsBetweenChecks, List.empty, List.empty)
+      loop(-minStepsBetweenChecks, List.empty, List.empty, Nil, Nil)
     }
 
     def updateGrad(request: GradUpdate): Future[Ack] = {

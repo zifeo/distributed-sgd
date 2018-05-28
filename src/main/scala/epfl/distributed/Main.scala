@@ -124,7 +124,7 @@ object Main extends App {
     case (Some(masterHost), Some(masterPort)) if masterHost == node.host && masterPort == node.port =>
       log.info("launch: only master")
 
-      val master = Master(node, trainData, model, config.async, config.nodeCount)
+      val master = Master(node, trainData, testData, model, config.async, config.nodeCount)
       master.start()
 
       scenario(master)
@@ -145,7 +145,7 @@ object Main extends App {
 
       val masterNode :: slaveNodes =
         (0 until (1 + config.nodeCount)).map(i => Node(config.host, config.port + i)).toList
-      val master = Master(masterNode, trainData, model, config.async, config.nodeCount)
+      val master = Master(masterNode, trainData, testData, model, config.async, config.nodeCount)
       val slaves = slaveNodes.map(n => new Slave(n, masterNode, trainData, model, config.async))
 
       master.start()

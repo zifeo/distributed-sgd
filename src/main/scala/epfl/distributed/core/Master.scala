@@ -16,7 +16,11 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContextExecutorService, Future, Promise}
 import scala.util.Random
 
-abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, expectedNodeCount: Int) {
+abstract class Master(node: Node,
+                      data: Array[(Vec, Int)],
+                      testData: Array[(Vec, Int)],
+                      model: SparseSVM,
+                      expectedNodeCount: Int) {
 
   protected val masterGrpcImpl: AbstractMasterGrpc
 
@@ -136,7 +140,9 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
         def loopEpoch(epoch: Int,
                       epochWeight: GradState,
                       losses: List[Number],
-                      accs: List[Number]): Future[GradState] = {
+                      accs: List[Double],
+                      testLosses: List[Number],
+                      testAccs: List[Double]): Future[GradState] = {
 
           if (losses.nonEmpty && accs.nonEmpty) {
             log.info("loss after epoch {}: {}", epoch, losses.head)
@@ -148,13 +154,25 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
           if (epoch >= maxEpochs) {
             log.info("Reached max number of epochs: stopping computation")
             log.info("Losses: {}", losses.reverse.mkString(", "))
+            log.info("Test losses: {}", testLosses.reverse.mkString(", "))
             log.info("Accuracies: {}", accs.reverse.mkString(", "))
+            log.info("Test Accuracies: {}", testAccs.reverse.mkString(", "))
+            println(losses.reverse.mkString(", "))
+            println(testLosses.reverse.mkString(", "))
+            println(accs.reverse.mkString(", "))
+            println(testAccs.reverse.mkString(", "))
             Future.successful(epochWeight.finish(losses.head))
           }
-          else if (stoppingCriterion(losses)) {
+          else if (stoppingCriterion(testLosses)) {
             log.info("Converged to target: stopping computation")
             log.info("Losses: {}", losses.reverse.mkString(", "))
+            log.info("Test losses: {}", testLosses.reverse.mkString(", "))
             log.info("Accuracies: {}", accs.reverse.mkString(", "))
+            log.info("Test Accuracies: {}", testAccs.reverse.mkString(", "))
+            println(losses.reverse.mkString(", "))
+            println(testLosses.reverse.mkString(", "))
+            println(accs.reverse.mkString(", "))
+            println(testAccs.reverse.mkString(", "))
             Future.successful(epochWeight.finish(losses.head))
           }
           else {
@@ -182,14 +200,19 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
 
             for {
               newEpochWeight <- futureEpochWeight
-              loss           <- distributedLoss(newEpochWeight, splitStrategy)
-              acc            <- distributedAccuracy(newEpochWeight, splitStrategy)
-              newGrad        <- loopEpoch(epoch + 1, epochWeight.replaceGrad(newEpochWeight), loss :: losses, acc :: accs)
+              newGrad <- loopEpoch(
+                            epoch + 1,
+                            epochWeight.replaceGrad(newEpochWeight),
+                            localLoss(newEpochWeight) :: losses,
+                            localAccuracy(newEpochWeight) :: accs,
+                            localLoss(newEpochWeight, Some(testData)) :: testLosses,
+                            localAccuracy(newEpochWeight, Some(testData)) :: testAccs
+                        )
             } yield newGrad
           }
         }
 
-        loopEpoch(0, GradState.start(initialWeights), List.empty, List.empty)
+        loopEpoch(0, GradState.start(initialWeights), List.empty, List.empty, Nil, Nil)
 
       }
     }
@@ -233,12 +256,17 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
 
 object Master {
 
-  def apply(node: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean, nodeCount: Int): Master = {
+  def apply(node: Node,
+            data: Array[(Vec, Int)],
+            testData: Array[(Vec, Int)],
+            model: SparseSVM,
+            async: Boolean,
+            nodeCount: Int): Master = {
     if (async) {
-      new MasterAsync(node, data, model, nodeCount)
+      new MasterAsync(node, data, testData, model, nodeCount)
     }
     else {
-      new MasterSync(node, data, model, nodeCount)
+      new MasterSync(node, data, testData, model, nodeCount)
     }
   }
 
