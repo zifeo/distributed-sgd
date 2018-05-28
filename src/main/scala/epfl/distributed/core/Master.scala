@@ -70,15 +70,15 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
       }
     }
 
-  def distributedAccuracy(weights: Vec, splitStrategy: SplitStrategy): Future[Number] = {
+  def distributedAccuracy(weights: Vec, splitStrategy: SplitStrategy): Future[Double] = {
     predict(weights, splitStrategy).map {
-      _.map {
+      _.count {
         case (i, p) =>
           val (_, y) = data(i)
           val label  = if (p > 0) 1 else -1
 
-          if (label == y) 1.0 else 0.0
-      }.sum / data.length
+          label == y
+      }.toDouble / data.length
     }
   }
 
@@ -90,6 +90,14 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
           (p - y) ** 2
       }.reduce(_ + _) / data.length)
 
+  }
+
+  def localAccuracy(weights: Vec): Double = {
+    data.count {
+      case (x, y) =>
+        val label = if (model(weights, x) >= Number.zero) 1 else -1
+        label == y
+    }.toDouble / data.length
   }
 
   def localLoss(weights: Vec): Number = {

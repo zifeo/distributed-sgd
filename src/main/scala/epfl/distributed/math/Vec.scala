@@ -19,9 +19,15 @@ trait Vec {
 
   def mapValues(op: Number => Number): Vec
 
-  def foldLeft[B](init: B)(op: (B, Number) => B): B
+  def reduce(op: (Number, Number) => Number): Number = values.reduce(op)
+
+  def fold(init: Number)(op: (Number, Number) => Number): Number = values.fold(init)(op)
+
+  def foldLeft[B](init: B)(op: (B, Number) => B): B = values.foldLeft(init)(op)
 
   def sparse: Vec
+
+  def apply(idx: Int): Number
 
   def +(other: Vec): Vec = elementWiseOp(other, _ + _)
 
@@ -44,7 +50,7 @@ trait Vec {
 
   def unary_- : Vec = mapValues(-_)
 
-  def sum: Number = foldLeft(Number.zero)(_ + _)
+  def sum: Number = fold(Number.zero)(_ + _)
 
   def normSquared: Number = foldLeft(Number.zero)(_ + _ ** 2)
   def norm: Number        = sqrt(normSquared)
@@ -56,9 +62,16 @@ trait Vec {
     case _: Sparse => Sparse.zeros(size)
   }
 
-  def valueLike(value: Number): Vec = this match {
-    case _: Dense  => Dense.fill(value, size)
-    case _: Sparse => Sparse(map.mapValues(_ => value), size)
+  def valueLike(value: Number): Vec = {
+    if(value === Number.zero){
+      zerosLike
+    }
+    else {
+      this match {
+        case _: Dense => Dense.fill(value, size)
+        case _: Sparse => Sparse(map.mapValues(_ => value), size)
+      }
+    }
   }
 
   def onesLike: Vec = valueLike(Number.one)
@@ -115,6 +128,12 @@ object Vec {
   def sum(vecs: Iterable[Vec]): Vec = {
     require(vecs.nonEmpty, "Cannot sum an empty list of vectors")
     vecs.reduce(_ + _)
+  }
+
+  def sparseSum(vecs: Iterable[Vec]): Vec = {
+    require(vecs.nonEmpty, "Cannot sum an empty list of vectors")
+    val keysets = vecs.foldLeft(Set.empty[Int])(_ union _.map.keySet)
+    Sparse(keysets.map(idx => idx -> vecs.foldLeft(Number.zero)(_ + _(idx))).toMap, vecs.head.size)
   }
 
   def mean(vecs: Iterable[Vec]): Vec = sum(vecs) / vecs.size

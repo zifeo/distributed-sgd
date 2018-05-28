@@ -19,7 +19,8 @@ class SparseSVM(lambda: Double) {
   // compute the gradient
   def backward(w: Vec, x: Vec, y: Int): Vec = {
     val activity       = y * x.dot(w)
-    val regularization = if (w.nonZeroCount() > 0) (w * lambda * 2.0 / w.nonZeroCount().toDouble).sum else Number.zero
+    val nonZeroCount = w.nonZeroCount()
+    val regularization = if (nonZeroCount > 0) ((lambda * 2.0 / nonZeroCount) * w).sum else Number.zero //This line induces an overhead of 700%
     val subgradient    = if (activity < 0) w.zerosLike else x * y
 
     subgradient + subgradient.valueLike(regularization)
