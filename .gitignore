@@ -18,7 +18,8 @@ project/plugins/project/
 .idea
 build
 .env
-data/*
+data/*.dat
+data/*.qrels
 .ivy2/
 .sbt/
 *.sc

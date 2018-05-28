@@ -36,7 +36,6 @@ spec:
       containers:
       - name: influxdb
         image: influxdb:1.5-alpine
-        imagePullPolicy: Always
         env:
         - name: INFLUXDB_DB
           value: "db"
@@ -44,6 +43,11 @@ spec:
           value: "root"
         - name: INFLUXDB_ADMIN_PASSWORD
           value: "secret"
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
       restartPolicy: Always
 
 ---
@@ -69,9 +73,21 @@ spec:
       - name: grafana
         image: zifeo/dsgd:grafana
         imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        volumeMounts:
+          - name: mnt
+            mountPath: /var/lib/grafana
+            subPath: grafana
+            readOnly: false
       restartPolicy: Always
-      imagePullSecrets:
-        - name: hub-private
+
+      volumes:
+      - name: mnt
+        persistentVolumeClaim:
+          claimName: cs449g4-scratch
 
 ---
 
@@ -95,11 +111,15 @@ spec:
       containers:
       - name: chronograf
         image: chronograf:1.5-alpine
-        imagePullPolicy: Always
         command:
         - chronograf
         - --influxdb-url=http://influxdb:8086
         - --influxdb-username=root
         - --influxdb-password=secret
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
       restartPolicy: Always
 
