@@ -9,36 +9,33 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
 
     other match {
       case otherSparseArray: SparseArrayVector =>
-        val zeros_vec_a      = this.sparseVec._2.map(q => (q, Number.zero))
-        val zeros_vec_b      = otherSparseArray.sparseVec._2.map(q => (Number.zero, q))
-        val combined_indices = this.sparseVec._1 ++ otherSparseArray.sparseVec._1
-        val combined_values  = zeros_vec_a ++ zeros_vec_b
-        val sorted           = orderByIndex((combined_indices, combined_values))
+        
+		val zipped_sequenceA = this.sparseVec._1 zip this.sparseVec._2
+		val zipped_sequenceB = otherSparseArray.sparseVec._1 zip otherSparseArray.sparseVec._2
+		val sortedA = sort(zipped_sequenceA)
+		val sortedB = sort(zipped_sequenceB)
+		val result = merge(sortedA,sortedB)
 
-        val map: Map[Int, ((Number, Number), Int)] = Map()
-        val test = sorted._2.foldLeft(map)((acc, tuple) => {
+		val sum = result.foldLeft( List[(Int,Number)]() )( (acc,data) => {
 
-          val index = combined_indices(tuple._2)
-          if (acc.contains(index)) {
+			if (acc.isEmpty ) {
+				data :: acc
+			}else{
+				val lastElement = acc.last
+				if( lastElement._1 == data._1 ){
+					acc.updated(acc.size - 1,(lastElement._1,op(lastElement._2,data._2)) )
+				}else{
+					data :: acc
+				}
+			}			
+		})		
 
-            val value_a   = acc(index)._1._1 + tuple._1._1
-            val value_b   = acc(index)._1._2 + tuple._1._2
-            val new_tuple = ((value_a, value_b), tuple._2)
-            acc + (index -> new_tuple)
-          }
-          else {
-            val data = acc + (index -> tuple)
-            data
-          }
+		val res = sum.unzip
 
-        })
+		val indices = res._1
+		val values = res._2
 
-        val result          = test.map(data => (data._1, op(data._2._1._1, data._2._1._2))).toList
-        val filtered_result = result.filter(q => abs(q._2) > SparseArrayVector.epsilon)
-        val result_index    = filtered_result.map(k => k._1)
-        val result_value    = filtered_result.map(k => k._2)
-
-        SparseArrayVector((result_index, result_value), this.size)
+		SparseArrayVector((indices,values), this.size)
 
       case vec =>
         //TODO
@@ -79,16 +76,22 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
     SparseArrayVector((this.sparseVec._1, result), this.size)
   }
 
-  private[this] def orderByIndex(
-      input: (List[Int], List[(Number, Number)])): (List[Int], List[((Number, Number), Int)]) = {
 
-    var indices = input._1.zipWithIndex
-    var values  = input._2.zipWithIndex
-    indices = indices.sortBy(x => x._1)
+  private[this] def merge(left: List[(Int,Number)], right: List[(Int,Number)]): List[(Int,Number)] =  {
+	
+	(left, right) match {
+		case (_, Nil) => left
+		case (Nil, _) => right
+		case(leftHead :: leftTail, rightHead :: rightTail) =>
+			if (leftHead._1 < rightHead._1) leftHead::merge(leftTail, right)
+			else rightHead :: merge(left, rightTail)
+	}
+  }
 
-    val order = indices.map(x => x._2)
-    values = values.sortWith((a, b) => order.indexOf(a._2) < order.indexOf(b._2))
-    (indices.map(x => x._1), values)
+
+  private[this] def sort(input : List[(Int,Number)]) : List[(Int,Number)] = {
+	scala.util.Sorting.stableSort(input,(e1:(Int,Number),e2:(Int,Number)) => e1._1 < e2._1)
+	input
   }
 
 }
@@ -122,14 +125,10 @@ object SparseArrayVector {
     (csr_columns, csr_values)
   }
 
-  /*
-	* changes the text file having form index:value into a list having
-	* each of them stored in a tuple
-	*/
-  def parseRow(row: String): List[(Int, Number)] = {
+   def parseRow(row: String): List[(Int, Number)] = {
     val parser = row.split(" ").map(f => f.split(":")).map(f => (f(0).toInt, Number(f(1)))).toList
     parser
   }
-
+  
   def zeros(size: Int): SparseArrayVector = SparseArrayVector((List(), List()), size)
 }
