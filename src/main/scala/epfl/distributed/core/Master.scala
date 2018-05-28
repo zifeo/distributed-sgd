@@ -136,8 +136,10 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
                       accs: List[Number]): Future[GradState] = {
 
           if (losses.nonEmpty && accs.nonEmpty) {
-            log.info("Loss after epoch {}: {}", epoch, losses.head)
-            log.info("Acc after epoch {}: {}", epoch, accs.head)
+            log.info("loss after epoch {}: {}", epoch, losses.head)
+            log.info("acc after epoch {}: {}", epoch, accs.head)
+            Kamon.histogram("master.sync.loss").record(losses.head.toLong)
+            Kamon.histogram("master.sync.acc").record(100 * accs.head.toLong)
           }
 
           if (epoch >= maxEpochs) {
@@ -154,7 +156,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
                 log.info(s"samples ${batch + 1} - ${Math.min(batch + batchSize, maxSamples)} / $maxSamples")
 
                 val timer = Kamon.timer("master.sync.batch.duration").start()
-                val work = workers.zip(split).map {
+                val work = workers.zip(split.map(Random.shuffle(_))).map {
                   case (worker, idx) =>
                     val req =
                       GradientRequest(batchWeights, idx.slice(batch, batch + batchSize))

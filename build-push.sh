@@ -6,6 +6,3 @@ docker push zifeo/dsgd:node
 
 docker build -t zifeo/dsgd:grafana -f dock/grafana/Dockerfile dock/grafana
 docker push zifeo/dsgd:grafana
-
-docker build -t zifeo/dsgd:influxdb -f dock/influxdb/Dockerfile dock/influxdb
-docker push zifeo/dsgd:influxdb

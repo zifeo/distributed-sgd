@@ -84,7 +84,6 @@ object Main extends App {
       res.await.grad
     }
 
-    println(w1)
     log.info("final weights: {}", w1.map.map { case (idx, n) => s"$idx:$n" }.mkString(" "))
     val l1 = master.distributedLoss(w1, ss).await
     log.info("final loss: {}", l1)

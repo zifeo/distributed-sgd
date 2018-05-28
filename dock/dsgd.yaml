@@ -6,16 +6,16 @@ metadata:
 
 data:
   DSGD_FULL: "false"
-  DSGD_ASYNC: "true"
+  DSGD_ASYNC: "false"
   DSGD_RECORD: "true"
   DSGD_DATA_PATH: "/opt/mnt/datasets"
-  DSGD_BATCH_SIZE: "100"
+  DSGD_BATCH_SIZE: "500"
   DSGD_LEARNING_RATE: "1"
   DSGD_LAMBDA: "1"
-  DSGD_NODE_COUNT: "3"
+  DSGD_NODE_COUNT: "10"
   DSGD_MASTER_PORT: "46746"
   DSGD_NODE_PORT: "46746"
-  DSGD_MAX_EPOCHS: "2"
+  DSGD_MAX_EPOCHS: "10"
   DSGD_GOSSIP_INTERVAL: "200"
   DSGD_LEAKY_LOSS: "0.9"
 
@@ -112,8 +112,8 @@ metadata:
 
 spec:
   serviceName: dsgd-slave
-  replicas: 3
-#  podManagementPolicy: Parallel
+  replicas: 10
+  podManagementPolicy: Parallel
 
   selector:
     matchLabels:

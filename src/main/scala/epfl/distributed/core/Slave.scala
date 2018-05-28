@@ -1,5 +1,7 @@
 package epfl.distributed.core
 
+import java.util.concurrent.TimeUnit
+
 import com.typesafe.scalalogging.Logger
 import epfl.distributed.core.ml.SparseSVM
 import epfl.distributed.math.Vec
@@ -13,7 +15,7 @@ import monix.execution.{CancelableFuture, Scheduler}
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM, async: Boolean) {
 
@@ -41,9 +43,21 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     log.info("started")
 
     // register slave node
-    masterStub.registerSlave(node).map { _ =>
-      log.info("registered to master")
-    }
+    def register: Future[Unit] =
+      masterStub
+        .withDeadlineAfter(5, TimeUnit.SECONDS)
+        .registerSlave(node)
+        .transformWith {
+          case Success(_) =>
+            log.info("registered to master")
+            Future.successful(())
+          case Failure(_) =>
+            log.info("fail registration, retrying")
+            Thread.sleep(2000)
+            register
+        }
+
+    register
   }
 
   def awaitTermination(): Unit = {
@@ -105,9 +119,11 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
 
     def forward(request: ForwardRequest): Future[ForwardReply] = Future {
       val ForwardRequest(samplesIdx, w) = request
+      val counter = Kamon.counter("slave.sync.forward")
 
       val preds = samplesIdx.map { idx =>
         val (x, y) = data(idx)
+        counter.increment()
         model(w, x)
       }
 
@@ -117,10 +133,12 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
     def gradient(request: GradientRequest): Future[GradUpdate] = Future {
       Measure.durationLog(log, "gradient") {
         val GradientRequest(w, samplesIdx) = request
+        val counter = Kamon.counter("slave.sync.gradient")
 
         val grad = samplesIdx
           .map { idx =>
             val (x, y) = data(idx)
+            counter.increment()
             model.backward(w, x, y)
           }
 
