@@ -4,6 +4,8 @@ import spire.math._
 
 case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) extends Vec {
 
+  override def apply(idx: Int): Number = sparseVec._1.find(_ == idx).map(sparseVec._2(_)).getOrElse(throw new IndexOutOfBoundsException)
+
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
     require(other.size == size, "Can't perform element-wise operation on vectors of different length")
 

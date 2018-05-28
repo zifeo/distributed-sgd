@@ -7,6 +7,8 @@ import spire.random.{Exponential, Gaussian, Uniform}
 case class Dense(override val values: IndexedSeq[Number]) extends Vec {
   require(values.nonEmpty, "A vector cannot be empty")
 
+  override def apply(idx: Int): Number = values(idx)
+
   def apply(indices: Iterable[Int]): Dense = Dense(indices.map(values(_)).toIndexedSeq)
 
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
@@ -27,8 +29,6 @@ case class Dense(override val values: IndexedSeq[Number]) extends Vec {
   override def mapValues(op: Number => Number): Vec = Dense(values.map(op))
 
   override def size: Int = values.size
-
-  override def foldLeft[B](init: B)(op: (B, Number) => B): B = values.foldLeft(init)(op)
 
   override def map: Map[Int, Number] = values.indices.zip(values).toMap
 

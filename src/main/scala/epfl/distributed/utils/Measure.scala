@@ -10,26 +10,28 @@ object Measure {
 
   def duration[T](f: => T): (T, Double) = {
     val start = currentMs
-    val res = f
-    val dur = currentMs - start
+    val res   = f
+    val dur   = currentMs - start
     (res, dur / 1e3)
-  }
-
-  def duration[T](f: => Future[T])(implicit ec: ExecutionContext): Future[(T, Double)] = {
-    val start = currentMs
-    f.map { res =>
-      val dur = currentMs - start
-      (res, dur / 1e3)
-    }
   }
 
   def durationLog[T](log: Logger, name: String)(f: => T): T = {
     log.info("{} start", name)
     val start = currentMs
-    val res = f
-    val dur = (currentMs - start) / 1e3
+    val res   = f
+    val dur   = (currentMs - start) / 1e3
     log.info("{} end ({}s)", name, dur)
     res
+  }
+
+  def durationLogF[T](log: Logger, name: String)(f: => Future[T])(implicit ec: ExecutionContext): Future[T] = {
+    log.info("{} start", name)
+    val start = currentMs
+    f.map { res =>
+      val dur = (currentMs - start) / 1e3
+      log.info("{} end ({}s)", name, dur)
+      res
+    }
   }
 
 }

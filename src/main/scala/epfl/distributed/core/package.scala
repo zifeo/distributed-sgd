@@ -18,7 +18,7 @@ package object core {
 
   // create a new channel to a gRPC server, disabling plaintext requires a certificate
   def newChannel(ip: String, port: Int): ManagedChannel =
-    ManagedChannelBuilder.forAddress(ip, port).usePlaintext().enableRetry().maxRetryAttempts(10).build
+    ManagedChannelBuilder.forAddress(ip, port).usePlaintext().build
 
   def pretty(node: Node): String = {
     val Node(ip, port) = node

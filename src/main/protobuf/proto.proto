@@ -10,7 +10,6 @@ option (scalapb.options) = {
   import: "epfl.distributed.core.vecTypeMapper"
 };
 
-
 service Master {
     rpc RegisterSlave (Node) returns (Ack) {}
     rpc UnregisterSlave (Node) returns (Ack) {}
@@ -26,6 +25,14 @@ message Node {
 
 message Ack {}
 
+message Sparse {
+    map<int32, double> map = 1 [(scalapb.field).value_type = "spire.math.Number"];
+    int32 size = 2;
+}
+
+message GradUpdate {
+    Sparse gradUpdate = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
+}
 
 service Slave {
     rpc RegisterSlave (Node) returns (Ack) {}
@@ -33,17 +40,12 @@ service Slave {
 
     // Sync operations
     rpc Forward (ForwardRequest) returns (ForwardReply) {}
-    rpc Gradient (GradientRequest) returns (GradientReply) {}
+    rpc Gradient (GradientRequest) returns (GradUpdate) {}
 
     // Async operations
-    rpc InitAsync (AsyncInit) returns (Ack) {}
-    rpc UpdateGrad (GradUpdate) returns (Ack) {}
+    rpc StartAsync (StartAsyncRequest) returns (Ack) {}
     rpc StopAsync (google.protobuf.Empty) returns (Ack) {}
-}
-
-message Sparse {
-    map<int32, double> map = 1 [(scalapb.field).value_type = "spire.math.Number"];
-    int32 size = 2;
+    rpc UpdateGrad (GradUpdate) returns (Ack) {}
 }
 
 message ForwardRequest {
@@ -60,18 +62,10 @@ message GradientRequest {
     repeated int32 samples = 2 [packed=true];
 }
 
-message GradientReply {
-    Sparse grad = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
-    int64 startedAt = 2;
-    int64 terminatedAt = 3;
-}
-
-message AsyncInit {
+message StartAsyncRequest {
     Sparse weights = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
     repeated int32 samples = 2;
     int32 batchSize = 3;
+    double learningRate = 4;
 }
 
-message GradUpdate {
-    Sparse gradUpdate = 1 [(scalapb.field).type = "epfl.distributed.math.Vec", (scalapb.field).no_box = true];
-}

@@ -1,6 +1,6 @@
 package epfl.distributed.core.ml
 
-import spire.math.Number
+import spire.math.{Number, _}
 
 object EarlyStopping {
 
@@ -10,11 +10,25 @@ object EarlyStopping {
 
   def target(target: Number): EarlyStopping = (losses: Seq[Number]) => losses.headOption.fold(false)(_ <= target)
 
-  def noImprovement(patience: Int = 7, minDelta: Number = 1e-3, minSteps: Option[Int] = None): EarlyStopping = {
+  def noImprovement(patience: Int = 5, minDelta: Number = 1e-3, minSteps: Option[Int] = None): EarlyStopping = {
     losses: Seq[Number] =>
       {
+        val absMinDelta = abs(minDelta)
+
+        def findMin(seq: Seq[Number]): (Number, Int) = {
+          seq.zipWithIndex.foldLeft(Number(Double.MaxValue) -> -1) {
+            case ((min, indexMin), (num, index)) =>
+              if ((num - min) <= absMinDelta) {
+                num -> index
+              }
+              else {
+                min -> indexMin
+              }
+          }
+        }
+
         def check: Boolean = {
-          val (_, indexMin) = losses.zipWithIndex.minBy(_._1)
+          val (_, indexMin) = findMin(losses)
 
           if (indexMin == 0) {
             //The min is the latest => still improving

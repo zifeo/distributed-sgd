@@ -1,3 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: dsgd-config
+
+data:
+  DSGD_FULL: "false"
+  DSGD_ASYNC: "false"
+  DSGD_RECORD: "true"
+  DSGD_DATA_PATH: "/opt/mnt/datasets"
+  DSGD_BATCH_SIZE: "200"
+  DSGD_LEARNING_RATE: "0.35"
+  DSGD_LAMBDA: "0.0001"
+  DSGD_NODE_COUNT: "10"
+  DSGD_MASTER_PORT: "46746"
+  DSGD_NODE_PORT: "46746"
+  DSGD_MAX_EPOCHS: "10"
+  DSGD_GOSSIP_INTERVAL: "200"
+  DSGD_LEAKY_LOSS: "0.9"
+  DSGD_PATIENCE: "5"
+  DSGD_CONV_DELTA: "0.001"
+
+---
+
 kind: Service
 apiVersion: v1
 
@@ -40,22 +65,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        - name: DSGD_NODE_PORT
-          value: "4000"
         - name: DSGD_MASTER_HOST
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        - name: DSGD_MASTER_PORT
-          value: "4000"
-        - name: DSGD_FULL
-          value: "false"
-        - name: DSGD_ASYNC
-          value: "false"
-        - name: DSGD_RECORD
-          value: "false"
-        - name: DSGD_DATA_PATH
-          value: "/opt/mnt/datasets"
+        envFrom:
+        - configMapRef:
+            name: dsgd-config
         imagePullPolicy: Always
         resources:
           limits:
@@ -98,7 +114,7 @@ metadata:
 
 spec:
   serviceName: dsgd-slave
-  replicas: 4
+  replicas: 10
   podManagementPolicy: Parallel
 
   selector:
@@ -119,20 +135,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-        - name: DSGD_NODE_PORT
-          value: "4000"
         - name: DSGD_MASTER_HOST
           value: "dsgd-master"
-        - name: DSGD_MASTER_PORT
-          value: "4000"
-        - name: DSGD_FULL
-          value: "false"
-        - name: DSGD_ASYNC
-          value: "false"
-        - name: DSGD_RECORD
-          value: "false"
-        - name: DSGD_DATA_PATH
-          value: "/opt/mnt/datasets"
+        envFrom:
+        - configMapRef:
+            name: dsgd-config
         imagePullPolicy: Always
         resources:
           limits:

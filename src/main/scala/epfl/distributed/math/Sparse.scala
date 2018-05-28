@@ -46,7 +46,7 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
   override def *(other: Vec): Vec = elementWiseOp(other, _ * _, opZeroIfOneArgZero = true)
 
   override def mapValues(op: Number => Number): Vec = {
-    if (op(Number.zero) === Number.zero) {
+    if (abs(op(Number.zero)) <= Sparse.epsilon) {
       //Default value stays zero
       Sparse(map.mapValues(op), size)
     }
@@ -56,11 +56,9 @@ class Sparse private (override val map: Map[Int, Number], val size: Int) extends
     }
   }
 
-  override def foldLeft[B](init: B)(op: (B, Number) => B): B = values.foldLeft(init)(op)
-
   override def sparse: Sparse = this
 
-  def apply(idx: Int): Number = {
+  override def apply(idx: Int): Number = {
     if (idx < 0 || idx > size) {
       throw new IndexOutOfBoundsException(s"Illegal index '$idx'. Seriously ?")
     }
