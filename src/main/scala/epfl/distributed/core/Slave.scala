@@ -95,7 +95,8 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
               counter.increment()
               model.backward(innerWeights, x, y)
           }
-          val gradUpdate = learningRate * Vec.mean(grads)
+          val grad = Vec.mean(grads)
+          val gradUpdate = learningRate * model.regularize(grad, innerWeights)
 
           weights.single.transform(_ - gradUpdate)
 

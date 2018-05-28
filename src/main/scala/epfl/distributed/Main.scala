@@ -3,12 +3,15 @@ package epfl.distributed
 import java.util.logging.LogManager
 
 import com.typesafe.scalalogging.Logger
+import epfl.distributed.Main.trainData
 import epfl.distributed.core.ml.{EarlyStopping, SparseSVM, SplitStrategy}
 import epfl.distributed.core.{Master, MasterAsync, MasterSync, Slave}
+import epfl.distributed.math.{Sparse, SparseArrayVector, Vec}
 import epfl.distributed.proto.Node
 import epfl.distributed.utils.{Config, Dataset, Measure, Pool}
 import kamon.Kamon
 import kamon.influxdb.InfluxDBReporter
+import spire.math.Number
 
 import scala.util.Random
 
@@ -48,8 +51,21 @@ object Main extends App {
 
   val (trainData, testData) = data.splitAt((data.length * 0.8).toInt)
 
+  val dimSparsity = Measure.durationLog(log, "dim sparsity") {
+    val dim = trainData(0)._1.size
+    val buff = Array.fill(dim)(Number.zero)
+    for {
+      (v, _) <- trainData
+      idx <- v.map.keys
+    } buff(idx - 1) += 1
+    val inv = buff.zipWithIndex.collect {
+      case (c, i) if c != Number.zero => i -> (1.0 / (c + 1))
+    }.toMap
+    Sparse(inv, dim)
+  }
+
   // could use another model
-  val model = new SparseSVM(config.lambda)
+  val model = new SparseSVM(config.lambda, dimSparsity)
 
   def scenario(master: Master): Unit = {
 

@@ -8,7 +8,7 @@ import spire.math.Number.{zero, one}
   * Sparse Support Vector Machine
   * @param lambda regularized parameter
   */
-class SparseSVM(val lambda: Number) {
+class SparseSVM(val lambda: Number, val dimSparsity: Vec) {
 
   // compute the prediction
   def forward(w: Vec, x: Vec): Number = (x dot w).signum * -one
@@ -27,9 +27,9 @@ class SparseSVM(val lambda: Number) {
   // compute the gradient
   def backward(w: Vec, x: Vec, y: Int): Vec = {
     val activity = y * x.dot(w)
-    val sub      = if (activity < 0) w.zerosLike else x * y
-    sub // TEO + regularize(sub, w)
+    if (activity < 0) w.zerosLike else x * y
   }
 
-  def regularize(grad: Vec, w: Vec): Vec = grad + grad.valueLike(lambda * 2.0 * w.sum)
+  def regularize(grad: Vec, w: Vec): Vec = grad + grad.valueLike(lambda * 2.0 * w.dot(dimSparsity))
+
 }
