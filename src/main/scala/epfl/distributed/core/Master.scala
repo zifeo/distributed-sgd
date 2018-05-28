@@ -89,7 +89,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
           case (i, p) =>
             val (_, y) = data(i)
             (p - y) ** 2
-        }.reduce(_ + _) / preds.length
+        }.reduce(_ + _) / preds.size
       }
   }
 
