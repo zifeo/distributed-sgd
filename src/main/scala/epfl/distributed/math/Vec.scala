@@ -63,12 +63,12 @@ trait Vec {
   }
 
   def valueLike(value: Number): Vec = {
-    if(value === Number.zero){
+    if (value === Number.zero) {
       zerosLike
     }
     else {
       this match {
-        case _: Dense => Dense.fill(value, size)
+        case _: Dense  => Dense.fill(value, size)
         case _: Sparse => Sparse(map.mapValues(_ => value), size)
       }
     }

@@ -4,40 +4,42 @@ import spire.math._
 
 case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) extends Vec {
 
-  override def apply(idx: Int): Number = sparseVec._1.find(_ == idx).map(sparseVec._2(_)).getOrElse(throw new IndexOutOfBoundsException)
+  override def apply(idx: Int): Number =
+    sparseVec._1.find(_ == idx).map(sparseVec._2(_)).getOrElse(throw new IndexOutOfBoundsException)
 
   def elementWiseOp(other: Vec, op: (Number, Number) => Number): Vec = {
     require(other.size == size, "Can't perform element-wise operation on vectors of different length")
 
     other match {
       case otherSparseArray: SparseArrayVector =>
-        
-		val zipped_sequenceA = this.sparseVec._1 zip this.sparseVec._2
-		val zipped_sequenceB = otherSparseArray.sparseVec._1 zip otherSparseArray.sparseVec._2
-		val sortedA = sort(zipped_sequenceA)
-		val sortedB = sort(zipped_sequenceB)
-		val result = merge(sortedA,sortedB)
+        val zipped_sequenceA = this.sparseVec._1 zip this.sparseVec._2
+        val zipped_sequenceB = otherSparseArray.sparseVec._1 zip otherSparseArray.sparseVec._2
+        val sortedA          = sort(zipped_sequenceA)
+        val sortedB          = sort(zipped_sequenceB)
+        val result           = merge(sortedA, sortedB)
 
-		val sum = result.foldLeft( List[(Int,Number)]() )( (acc,data) => {
+        val sum = result.foldLeft(List[(Int, Number)]())((acc, data) => {
 
-			if (acc.isEmpty ) {
-				data :: acc
-			}else{
-				val lastElement = acc.last
-				if( lastElement._1 == data._1 ){
-					acc.updated(acc.size - 1,(lastElement._1,op(lastElement._2,data._2)) )
-				}else{
-					data :: acc
-				}
-			}			
-		})		
+          if (acc.isEmpty) {
+            data :: acc
+          }
+          else {
+            val lastElement = acc.last
+            if (lastElement._1 == data._1) {
+              acc.updated(acc.size - 1, (lastElement._1, op(lastElement._2, data._2)))
+            }
+            else {
+              data :: acc
+            }
+          }
+        })
 
-		val res = sum.unzip
+        val res = sum.unzip
 
-		val indices = res._1
-		val values = res._2
+        val indices = res._1
+        val values  = res._2
 
-		SparseArrayVector((indices,values), this.size)
+        SparseArrayVector((indices, values), this.size)
 
       case vec =>
         throw new UnsupportedOperationException("Coming soon")
@@ -75,22 +77,20 @@ case class SparseArrayVector(sparseVec: (List[Int], List[Number]), size: Int) ex
     SparseArrayVector((this.sparseVec._1, result), this.size)
   }
 
+  private[this] def merge(left: List[(Int, Number)], right: List[(Int, Number)]): List[(Int, Number)] = {
 
-  private[this] def merge(left: List[(Int,Number)], right: List[(Int,Number)]): List[(Int,Number)] =  {
-	
-	(left, right) match {
-		case (_, Nil) => left
-		case (Nil, _) => right
-		case(leftHead :: leftTail, rightHead :: rightTail) =>
-			if (leftHead._1 < rightHead._1) leftHead::merge(leftTail, right)
-			else rightHead :: merge(left, rightTail)
-	}
+    (left, right) match {
+      case (_, Nil) => left
+      case (Nil, _) => right
+      case (leftHead :: leftTail, rightHead :: rightTail) =>
+        if (leftHead._1 < rightHead._1) leftHead :: merge(leftTail, right)
+        else rightHead :: merge(left, rightTail)
+    }
   }
 
-
-  private[this] def sort(input : List[(Int,Number)]) : List[(Int,Number)] = {
-	scala.util.Sorting.stableSort(input,(e1:(Int,Number),e2:(Int,Number)) => e1._1 < e2._1)
-	input
+  private[this] def sort(input: List[(Int, Number)]): List[(Int, Number)] = {
+    scala.util.Sorting.stableSort(input, (e1: (Int, Number), e2: (Int, Number)) => e1._1 < e2._1)
+    input
   }
 
 }
@@ -124,10 +124,10 @@ object SparseArrayVector {
     (csr_columns, csr_values)
   }
 
-   def parseRow(row: String): List[(Int, Number)] = {
+  def parseRow(row: String): List[(Int, Number)] = {
     val parser = row.split(" ").map(f => f.split(":")).map(f => (f(0).toInt, Number(f(1)))).toList
     parser
   }
-  
+
   def zeros(size: Int): SparseArrayVector = SparseArrayVector((List(), List()), size)
 }
