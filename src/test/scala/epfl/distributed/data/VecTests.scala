@@ -34,6 +34,12 @@ class VecTests extends Spec {
         an [IllegalArgumentException] should be thrownBy Dense(1, 2, 3, 4) / 0
       }
 
+      "return correct sparsity" in {
+        val v1 = Sparse(Map(0 -> 1, 1 -> 2), 10)
+
+        v1.sparsity() shouldEqual 0.8
+      }
+
     }
 
   }

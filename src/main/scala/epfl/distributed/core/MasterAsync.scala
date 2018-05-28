@@ -13,7 +13,6 @@ import spire.math.Number
 import scala.concurrent.duration._
 import scala.concurrent.stm._
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.Success
 
 class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
     extends Master(node, data, model, nodeCount: Int) {
