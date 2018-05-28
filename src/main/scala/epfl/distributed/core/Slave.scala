@@ -143,14 +143,15 @@ class Slave(node: Node, master: Node, data: Array[(Vec, Int)], model: SparseSVM,
         val GradientRequest(w, samplesIdx) = request
         val counter                        = Kamon.counter("slave.sync.backward")
 
-        val grad = samplesIdx
+        val grads = samplesIdx
           .map { idx =>
             val (x, y) = data(idx)
             counter.increment()
             model.backward(w, x, y)
           }
+        val grad = Vec.sum(grads)
 
-        GradUpdate(Vec.sum(grad))
+        GradUpdate(model.regularize(grad, w))
       }
     }
 

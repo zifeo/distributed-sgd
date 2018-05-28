@@ -5,14 +5,14 @@ import epfl.distributed.core.ml.EarlyStopping.EarlyStopping
 import epfl.distributed.core.ml.{GradState, SparseSVM, SplitStrategy}
 import epfl.distributed.math.Vec
 import epfl.distributed.proto._
-import epfl.distributed.utils.Dataset.Data
 import kamon.Kamon
 import monix.eval.Task
+import monix.execution.Scheduler
 import spire.math.Number
 
 import scala.concurrent.duration._
 import scala.concurrent.stm._
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.Success
 
 class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCount: Int)
@@ -57,7 +57,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
       log.info("waiting for slaves updates")
       masterGrpcImpl
         .startLossChecking(minStepsBetweenChecks = checkEvery, leakLossCoef)
-        .runAsync(monix.execution.Scheduler.Implicits.global)
+        .runAsync(Scheduler(ec: ExecutionContext))
       weightsPromise.future
     }
   }
