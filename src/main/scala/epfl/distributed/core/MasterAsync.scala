@@ -112,7 +112,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
               val computedLoss = localSampledLoss(innerGradState.grad, 1000)
               val computedAccs = localSampledAccuracy(innerGradState.grad, 1000)
               val loss         = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
-              val acc         = leakCoef * computedAccs + (1 - leakCoef) * accs.headOption.getOrElse(computedAccs)
+              val acc          = leakCoef * computedAccs + (1 - leakCoef) * accs.headOption.getOrElse(computedAccs)
               Kamon.counter("master.async.loss").increment(loss.toLong)
 
               atomic { implicit txn =>
@@ -128,7 +128,7 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], model: SparseSVM, nodeCou
               }
 
               val newLosses = loss :: losses
-              val newAccs = acc :: accs
+              val newAccs   = acc :: accs
 
               if (stoppingCriterion(newLosses)) { // converged => end computation
                 log.info("converged to target: stopping computation")

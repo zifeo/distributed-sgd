@@ -52,11 +52,11 @@ object Main extends App {
   val (trainData, testData) = data.splitAt((data.length * 0.8).toInt)
 
   val dimSparsity = Measure.durationLog(log, "dim sparsity") {
-    val dim = trainData(0)._1.size
+    val dim  = trainData(0)._1.size
     val buff = Array.fill(dim)(Number.zero)
     for {
       (v, _) <- trainData
-      idx <- v.map.keys
+      idx    <- v.map.keys
     } buff(idx - 1) += 1
     val inv = buff.zipWithIndex.collect {
       case (c, i) if c != Number.zero => i -> (1.0 / (c + 1))

@@ -109,7 +109,7 @@ abstract class Master(node: Node, data: Array[(Vec, Int)], model: SparseSVM, exp
 
   def localSampledAccuracy(weights: Vec, samplesCount: Int, testData: Option[Data] = None): Number = {
     val workingData = testData.getOrElse(data)
-    val samples = Random.shuffle[Int, IndexedSeq](workingData.indices) take samplesCount map workingData
+    val samples     = Random.shuffle[Int, IndexedSeq](workingData.indices) take samplesCount map workingData
     samples.count { case (x, y) => model.forward(weights, x) === y }.toDouble / samples.length
   }
 
