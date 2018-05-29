@@ -77,17 +77,7 @@ spec:
           limits:
             cpu: "2"
             memory: "4Gi"
-        volumeMounts:
-          - name: mnt
-            mountPath: /var/lib/grafana
-            subPath: grafana
-            readOnly: false
       restartPolicy: Always
-
-      volumes:
-      - name: mnt
-        persistentVolumeClaim:
-          claimName: cs449g4-scratch
 
 ---
 
