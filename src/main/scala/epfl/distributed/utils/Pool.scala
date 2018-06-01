@@ -10,7 +10,7 @@ object Pool {
 
   def newFixedExecutor(cores: Int = Runtime.getRuntime.availableProcessors()): ExecutionContextExecutorService = {
     // number of threads should be of order cores^2
-    val pool = Executors.newFixedThreadPool(if (cores > 1) cores * cores / 2 else 1)
+    val pool = Executors.newFixedThreadPool(8)//if (cores >= 4) 16 else if (cores > 1) cores * cores / 2 else 1)
     KamonExecutors.register("fixed-thread-pool", pool)
     ExecutionContext.fromExecutorService(pool)
   }

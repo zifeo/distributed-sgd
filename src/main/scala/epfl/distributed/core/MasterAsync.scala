@@ -113,32 +113,34 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], testData: Array[(Vec, Int
               loop(lastStep, losses, accs, testLosses, testAccs).delayExecution(2.seconds + 500.millis)
             }
             else {
-              val computedLoss     = localLoss(innerGradState.grad)
+              log.info(s"Computing loss. Last computed at: $lastStep, current: ${innerGradState.updates}")
+              //val computedLoss     = localLoss(innerGradState.grad)
               val computedLossTest = localLoss(innerGradState.grad, Some(testData))
-              val computedAcc      = localAccuracy(innerGradState.grad)
+              //val computedAcc      = localAccuracy(innerGradState.grad)
               val computedAccTest  = localAccuracy(innerGradState.grad, Some(testData))
-              val loss             = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
+              //val loss             = leakCoef * computedLoss + (1 - leakCoef) * losses.headOption.getOrElse(computedLoss)
               val lossTest = leakCoef * computedLossTest + (1 - leakCoef) * testLosses.headOption.getOrElse(
                   computedLossTest)
-              val acc     = leakCoef * computedAcc + (1 - leakCoef) * accs.headOption.getOrElse(computedAcc)
+              //val acc     = leakCoef * computedAcc + (1 - leakCoef) * accs.headOption.getOrElse(computedAcc)
               val accTest = leakCoef * computedAccTest + (1 - leakCoef) * testAccs.headOption.getOrElse(computedAccTest)
-              Kamon.counter("master.async.loss").increment(loss.toLong)
+              Kamon.counter("master.async.loss").increment(lossTest.toLong)
+
+              log.info(s"Loss computed at steps ${innerGradState.updates}. Test Loss: $lossTest")
 
               atomic { implicit txn =>
                 // for early stopping: set best loss and related gradient
                 val isBestLoss = bestLoss.transformIfDefined {
-                  case oldLoss if oldLoss > loss => loss
+                  case oldLoss if oldLoss > lossTest => lossTest
                 }
                 if (isBestLoss) {
                   bestGrad.set(innerGradState.grad)
+                  log.info("Best loss so far !")
                 }
-
-                log.info(s"Steps: ${innerGradState.updates}, loss: $loss")
               }
 
-              val newLosses     = loss :: losses
+              val newLosses     = Nil//oss :: losses
               val newLossesTest = lossTest :: testLosses
-              val newAccs       = acc :: accs
+              val newAccs       = Nil//acc :: accs
               val newAccsTest   = accTest :: testAccs
 
               if (stoppingCriterion(newLossesTest)) { // converged => end computation
@@ -160,18 +162,15 @@ class MasterAsync(node: Node, data: Array[(Vec, Int)], testData: Array[(Vec, Int
     }
 
     def updateGrad(request: GradUpdate): Future[Ack] = {
-      if (running) {
-        val newGradState = gradState.single.transformAndGet(_.update(request.gradUpdate))
+      val newGradState = gradState.single.transformAndGet(_.update(request.gradUpdate))
 
-        log.trace(s"${newGradState.updates} updates received")
-
-        if (newGradState.updates >= maxSteps) {
-          log.info("max number of steps reached: stopping computation")
-          endComputation()
-        }
+      if (newGradState.updates % 20 == 0) {
+        log.info(s"${newGradState.updates} updates received")
       }
-      else {
-        log.debug("Received gradient update after computation ended")
+
+      if (newGradState.updates >= maxSteps) {
+        log.info("max number of steps reached: stopping computation")
+        endComputation()
       }
 
       Future.successful(Ack())
