@@ -1,6 +1,6 @@
 # Distributed SDG
 
- This project showcases a distributed implementation of the stochastic gradient descent algorithm. It introduces a synchronous and an asynchronous version. One the one hand, the synchronous version includes a master node which ensures that the computation of the gradient and the update steps of SGD are coordinated among worker nodes. On the other hand, in the asynchronous version the worker nodes perform computation on their own and frequently exchange weight updates among each other. The master only manage the start and end of the full algorithm (e.g. split the work and collect the result).
+ This project showcases a distributed implementation of the stochastic gradient descent algorithm. It introduces a synchronous and an asynchronous version. On the one hand, the synchronous version includes a master node which ensures that the computation of the gradient and the update steps of SGD are coordinated among worker nodes. On the other hand, in the asynchronous version the worker nodes perform computation on their own and frequently exchange weight updates among each other. The master only manage the start and end of the full algorithm (e.g. split the work and collect the result).
 
 ## Getting started
 
